@@ -11,18 +11,35 @@ from src.gen import dataframe_from_dict
 YAHOO_API_KEY = os.environ.get('YAHOO_FINANCE_API_KEY')
 YAHOO_API_URL = "https://yfapi.net/v8/finance/spark"
 
-QUERY = {
-    "symbols": None,
+EXAMPLE_STOCKS = ['AAPL', 'F']
+
+# TODO: Think about how to properly integrate api with different options,
+#  local variables with some defaults probably not best way to do this
+PERIOD_QUERY = {
+    "symbols": "",
     "interval": "1d",
     "range": "10y"}
+
+FIXED_QUERY = {
+    "symbols": "",
+    "start": "2020-01-01",
+    "end": "2020-12-31"}
 
 HEADERS = {'x-api-key': YAHOO_API_KEY}
 
 # TODO: is yfinance and api data consistent?
 
 
-def download_data(stocks):
-    return yf.download(stocks, period=QUERY["range"], interval=QUERY["interval"])
+def get_example_fixed_data():
+    return download_fixed_data(EXAMPLE_STOCKS)
+
+
+def download_fixed_data(stocks):
+    return yf.download(stocks, start=FIXED_QUERY["start"], end=FIXED_QUERY["end"])
+
+
+def download_period_data(stocks):
+    return yf.download(stocks, period=PERIOD_QUERY["range"], interval=PERIOD_QUERY["interval"])
 
 
 def get_historical_data(stocks):
@@ -52,8 +69,8 @@ def get_historical_data(stocks):
 
 def yahoo_api_call(stocks: abc.Iterable):
 
-    QUERY['symbols'] = ','.join(stocks)
-    response = requests.request("GET", YAHOO_API_URL, headers=HEADERS, params=QUERY)
+    PERIOD_QUERY['symbols'] = ','.join(stocks)
+    response = requests.request("GET", YAHOO_API_URL, headers=HEADERS, params=PERIOD_QUERY)
     content = json.loads(response.content.decode('utf-8'))
 
     return content
