@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from src.gen import pct_change
 
 
@@ -14,13 +15,20 @@ class LiveStrategy:
     opened_at = None
     profit = 0
 
-    def main(self, data):
-        for window in data.rolling(window=self.lookback_period):
-            self.strategy(window)
+    result = []
+
+    def main(self, data, verbosity=2):
+        for i, window in enumerate(data.rolling(window=self.lookback_period)):
+            data[i, 'Transaction'] = self.strategy(window['Adj Close'])
+            if verbosity == 2 and i > 1:
+                self.plot(data.iloc[i-1:i])
+                plt.pause(0.05)
 
         return self.profit
 
     def strategy(self, price_list):
+
+        res = ""
 
         if len(price_list) >= self.lookback_period:
 
@@ -33,6 +41,7 @@ class LiveStrategy:
                 if sum(change) > self.entry:
 
                     self.opened_at = price_list[-1]
+                    res = "buy"
             else:
                 prices = np.array([self.opened_at, price_list[-1]])
                 change_since_buy = pct_change(prices)
@@ -41,3 +50,19 @@ class LiveStrategy:
 
                     self.profit += change_since_buy * self.investment
                     self.opened_at = None
+                    res = "sell"
+                else:
+                    res = "hold"
+
+        return res
+
+    def plot(self, data):
+
+        plt.gcf()
+        plt.plot(data['Adj Close'], c='b')
+
+        buy = data.loc[data['Transaction'] == "buy"]
+        sell = data.loc[data['Transaction'] == "sell"]
+
+        plt.scatter(buy.index, buy, marker='^', c='g')
+        plt.scatter(sell.index, sell, marker='^', c='k')

@@ -1,3 +1,5 @@
 # Default ignored files
 /shelf/
+/venv/
 /workspace.xml
+/*.hdf5

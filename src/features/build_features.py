@@ -21,6 +21,9 @@ def add_analysis(data: pd.DataFrame):
                        RSI=lambda df: df['RS'].apply(lambda x: 100 - (100/(x + 1)))
                        )
 
+    # Initialising transaction column
+    data['Transaction'] = ""
+
     return data
 
 

@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from src.data import get_data
 from src.features import build_features
 from strategies.live import LiveStrategy
@@ -17,6 +18,15 @@ if __name__ == "__main__":
     profit = {}
     for stock, data in stocks_data.items():
         strategy = LiveStrategy()
-        profit[stock] = strategy.main(data['Adj Close'])
+        profit[stock] = strategy.main(data)
 
+        """
+        buy = data['Adj Close'].loc[data['result'] == "buy"]
+        sell = data['Adj Close'].loc[data['result'] == "sell"]
+        plt.figure()
+        plt.scatter(buy.index, buy, marker='^', c='g')
+        plt.scatter(sell.index, sell, marker='^', c='k')
+        plt.plot(data['Adj Close'])
+        plt.show()
+        """
     print(profit)
