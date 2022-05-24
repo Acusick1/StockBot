@@ -1,5 +1,5 @@
 import pandas as pd
-from src.data.get_data import get_example_fixed_data
+from src.data.get_data import get_example_data
 
 
 def add_analysis(data: pd.DataFrame):
@@ -28,28 +28,25 @@ def add_analysis(data: pd.DataFrame):
 
 
 def format_data(data: pd.DataFrame):
-    data = data.swaplevel(0, 1, axis=1)
+
+    # data = data.swaplevel(0, 1, axis=1)
 
     return data
 
 
-def main(data: pd.DataFrame = None):
-    """Main build features function to pipeline raw data to usable data containing features etc. within models"""
-    # TODO: Main probably shouldn't have an input? Hence below hack. Check best practices
-    if data is None:
-        data = get_example_fixed_data()
+def build(data: pd.DataFrame = None):
+    """Build features function to pipeline raw data to usable data containing features etc. within models"""
 
     data = format_data(data)
 
     # TODO: Better way to do this, preferably without reassigning data, ideally doing so in a vectorised fashion
     # TODO: List comprehension once confident in implementation and tests built
-    stock_data = {}
-    for stock, _ in data:
-        stock_data[stock] = add_analysis(data[stock])
+    for stock, df in data.items():
+        data[stock] = add_analysis(df)
 
-    return stock_data
+    return data
 
 
 if __name__ == "__main__":
 
-    main()
+    build(get_example_data())

@@ -1,6 +1,9 @@
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
-from src.gen import pct_change
+from src.gen import pct_change, get_subplot_shape
+
+matplotlib.use('TkAgg')
 
 
 class LiveStrategy:
@@ -17,18 +20,32 @@ class LiveStrategy:
 
     result = []
 
-    def main(self, data, verbosity=2):
+    def __init__(self, verbosity: int = 1):
+
+        self.verbosity = verbosity
+
+    def main(self, data):
+
+        transaction = np.full([data.shape[0] + 1], "none", dtype="<U4")
+
         for i, window in enumerate(data.rolling(window=self.lookback_period)):
-            data[i, 'Transaction'] = self.strategy(window['Adj Close'])
-            if verbosity == 2 and i > 1:
-                self.plot(data.iloc[i-1:i])
-                plt.pause(0.05)
+            transaction[i] = self.strategy(window['Adj Close'])
+            if self.verbosity >= 1 and i < data.shape[0]:
+
+                c = "r" if transaction[i] in ("hold", "buy") else "k"
+
+                plt.plot(data['Adj Close'].iloc[i:i+2], c=c)
+
+                if transaction[i] in ("buy", "sell"):
+                    plt.scatter(data.index[i], data["Adj Close"].iloc[i], c=c, marker="x")
+
+                plt.pause(0.1)
 
         return self.profit
 
     def strategy(self, price_list):
 
-        res = ""
+        res = "none"
 
         if len(price_list) >= self.lookback_period:
 
