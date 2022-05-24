@@ -1,6 +1,5 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from src.data import get_data
+from src.data.get_data import FinanceApi
 from src.features import features
 from strategies.live import LiveStrategy
 from src.gen import get_subplot_shape
@@ -13,7 +12,8 @@ if __name__ == "__main__":
     # input_stocks = ["AAPL", "BTC-USD", "EURUSD=X", "F"]
     input_stocks = ["AAPL", "F", "AMD", "NVDA", "MSFT"]
 
-    dfs = get_data.download_data(input_stocks)
+    api = FinanceApi()
+    dfs = api.download_data(input_stocks)
     stocks_data = features.build(dfs)
 
     subplot_shape = get_subplot_shape(len(input_stocks))

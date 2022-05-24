@@ -1,23 +1,25 @@
 import unittest
 from unittest import mock
-from src.data import get_data
-from src.data.yahoo_api import YahooApi
+from src.data.get_data import FinanceApi, YahooApi
 
 EXAMPLE_STOCKS = ['AAPL', 'F']
 
 
-class TestData(unittest.TestCase):
+class TestFinanceApi(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.api = FinanceApi()
 
     def test_download_data(self):
 
-        data = get_data.download_data(EXAMPLE_STOCKS)
+        data = self.api.download_data(EXAMPLE_STOCKS)
         self.assertTrue(all(s in data for s in EXAMPLE_STOCKS))
 
     @mock.patch('yfinance.download', return_value=None)
     @mock.patch('time.sleep', return_value=None)
     def test_download_data_calls(self, sleep, yfd):
 
-        _ = get_data.download_data(EXAMPLE_STOCKS)
+        _ = self.api.download_data(EXAMPLE_STOCKS)
         assert yfd.call_count == len(EXAMPLE_STOCKS)
         assert sleep.call_count == len(EXAMPLE_STOCKS) - 1
 
@@ -35,11 +37,11 @@ class TestYahooApi(unittest.TestCase):
 
     def setUp(self) -> None:
 
-        self.obj = YahooApi()
+        self.api = YahooApi()
 
     def test_make_request(self):
 
-        response = self.obj.make_request(
+        response = self.api.make_request(
             endpoint=self.example_request["endpoint"],
             params=self.example_request["params"])
 

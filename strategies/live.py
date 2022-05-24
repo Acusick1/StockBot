@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from src.gen import pct_change, get_subplot_shape
+from src.gen import pct_change
 
 matplotlib.use('TkAgg')
 
@@ -75,6 +75,7 @@ class LiveStrategy:
 
     def plot(self, data):
 
+        # TODO: Remove and make generic plotting functions for all strategies in a super class.
         plt.gcf()
         plt.plot(data['Adj Close'], c='b')
 
