@@ -1,76 +1,61 @@
-import os
-import requests
-import json
-import h5py
+import time
 import yfinance as yf
-import pandas as pd
-from datetime import datetime
-from collections import abc
-from src.gen import dataframe_from_dict
+from typing import Union, Optional
 
-YAHOO_API_KEY = os.environ.get('YAHOO_FINANCE_API_KEY')
-YAHOO_API_URL = "https://yfapi.net/v8/finance/spark"
-
-EXAMPLE_STOCKS = ['AAPL', 'F']
-
-# TODO: Think about how to properly integrate api with different options,
-#  local variables with some defaults probably not best way to do this
-PERIOD_QUERY = {
-    "symbols": "",
-    "interval": "1d",
-    "range": "10y"}
-
-FIXED_QUERY = {
-    "symbols": "",
-    "start": "2020-01-01",
-    "end": "2020-12-31"}
-
-HEADERS = {'x-api-key': YAHOO_API_KEY}
-
-# TODO: is yfinance and api data consistent?
+valid_periods = ("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max")
+valid_intervals = ("1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo")
 
 
-def get_example_fixed_data():
-    return download_fixed_data(EXAMPLE_STOCKS)
+def get_example_data():
+
+    return download_data(tickers=["AAPL", "F"], period="1y")
 
 
-def download_fixed_data(stocks):
-    return yf.download(stocks, start=FIXED_QUERY["start"], end=FIXED_QUERY["end"])
+def download_data(tickers: Union[list, tuple],
+                  period: valid_periods = "1mo",
+                  interval: valid_intervals = "1d",
+                  start: str = None,
+                  end: str = None,
+                  group_by: str = "ticker",
+                  auto_adjust: bool = False,
+                  prepost: bool = False,
+                  threads: Union[bool, int] = True,
+                  proxy: Optional[bool] = None,
+                  **kwargs):
+    """Download financial data using yfinance API
+        :param tickers: list or string as well
+        :param period: use "period" instead of start/end
+        :param interval: fetch data by interval (including intraday if period < 60 days)
+        :param start: string with start date, used with end instead of period/interval
+        :param end: string with end date
+        :param group_by: group by ticker (to access via data['SPY'])
+            (optional, default is 'ticker')
+        :param auto_adjust: adjust all OHLC automatically
+        :param prepost: download pre/post regular market hours data
+        :param threads: use threads for mass downloading? (True/False/Integer)
+        :param proxy: use proxy server to download data
+    """
 
+    # Gather all function arguments to dict
+    args = locals().copy()
 
-def download_period_data(stocks):
-    return yf.download(stocks, period=PERIOD_QUERY["range"], interval=PERIOD_QUERY["interval"])
+    # If additional key word arguments passed, replace kwarg nested item with items per argument
+    if args.get("kwargs") is not None:
+        args.pop("kwargs")
+        args.update(kwargs)
 
+    # Time period must be either period/interval (default) or start/end, remove not needed keys
+    drop_keys = ("start", "end") if args.get("start") is None else ("period", "interval")
 
-def get_historical_data(stocks):
+    for key in drop_keys:
+        args.pop(key)
 
-    now = datetime.now()
-    filename = "data_" + now.strftime("%d_%b_%Y") + '.hdf5'
+    args.pop("tickers")
+    data = {}
+    for ticker in tickers:
+        data[ticker] = yf.download(ticker, **args)
 
-    with h5py.File(filename, 'a') as f:
-        saved_keys = list(f.keys())
-        print(saved_keys)
+        if ticker != tickers[-1]:
+            time.sleep(1)
 
-    dfs = {s: pd.read_hdf(filename, key=s) for s in stocks if s in saved_keys}
-    stocks = [s for s in stocks if s not in dfs.keys()]
-
-    if stocks:
-        content = yahoo_api_call(stocks)
-        for stock, data in content.items():
-            data['timestamp'] = pd.to_datetime(data['timestamp'], unit='s')
-            df = dataframe_from_dict(data)
-            df.set_index('timestamp', inplace=True)
-            dfs[stock] = df
-
-            df.to_hdf(filename, key=stock, mode='a')
-
-    return dfs
-
-
-def yahoo_api_call(stocks: abc.Iterable):
-
-    PERIOD_QUERY['symbols'] = ','.join(stocks)
-    response = requests.request("GET", YAHOO_API_URL, headers=HEADERS, params=PERIOD_QUERY)
-    content = json.loads(response.content.decode('utf-8'))
-
-    return content
+    return data
