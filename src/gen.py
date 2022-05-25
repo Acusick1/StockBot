@@ -1,5 +1,7 @@
+import h5py
 import numpy as np
 import pandas as pd
+from datetime import datetime
 from collections import abc
 
 
@@ -34,3 +36,19 @@ def get_subplot_shape(num: int, max_columns: int = 8) -> (int, int):
     quotient, rem = divmod(num, columns)
     rows = quotient + 1 if rem else quotient
     return rows, columns
+
+
+def keys_in_hdf(file_path) -> list:
+
+    with h5py.File(file_path, 'r') as f:
+        saved_keys = list(f.keys())
+
+    return saved_keys
+
+
+def validate_date_format(inp: str, form: str = '%Y-%m-%d'):
+
+    try:
+        datetime.strptime(inp, form)
+    except ValueError:
+        raise ValueError(f"Incorrect date format input: {inp}. Format required is: {form}")

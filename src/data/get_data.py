@@ -1,141 +1,100 @@
-import os
-import requests
-import json
-import h5py
-import time
 import pandas as pd
-import yfinance as yf
-from typing import Union, Optional, Dict, List, Tuple
-from datetime import datetime
-from src.gen import dataframe_from_dict
+from pathlib import Path
+from typing import Optional, Dict
+from datetime import datetime, timedelta
+from src.data.apis import FinanceApi
+from src.data.database import get_interval_filename
+from src.settings import VALID_PERIODS, VALID_INTERVALS, TIME_IN_SECONDS, DATA_PATH
+from src.gen import keys_in_hdf
 
-valid_periods = ("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max")
-valid_intervals = ("1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo")
+# TODO: Ideally update_data_file finds the last saved entry, downloads proceeding data and appends it to HDF5 file,
+#  rather than reading in full dataset, combining and dropping duplicates. Generally, need to look into how pandas can
+#  work with HDF5 files.
+
+
+def get_stock_data(stocks, interval: VALID_INTERVALS, period: VALID_PERIODS, **kwargs) -> Dict:
+
+    api = FinanceApi(interval=interval, period=period, **kwargs)
+
+    data = {}
+    file_path = DATA_PATH / get_interval_filename(interval)
+
+    saved_keys = keys_in_hdf(file_path) if file_path.exists() else None
+
+    for stock in stocks:
+        if saved_keys is not None and stock in saved_keys:
+            df = pd.DataFrame(pd.read_hdf(file_path, key=stock))
+
+            start = kwargs.get("start")
+            end = kwargs.get("end")
+
+            if start is not None:
+
+                data[stock] = get_start_end_data(df, start, end)
+            else:
+                data[stock] = get_period_data(df, period)
+
+        if stock not in data or data[stock] is None:
+            d = api.download_data([stock])
+            data.update(d)
+
+    return data
+
+
+def get_start_end_data(df: pd.DataFrame, start: str, end: str) -> Optional[pd.DataFrame]:
+
+    needed_dates = pd.date_range(start=start, end=end, freq="B")
+    # Data only stored up to (not including) end date, so remove last date if more than one date requested
+    if len(needed_dates) > 1:
+        needed_dates = needed_dates.drop(needed_dates[-1])
+
+    unique_dates = pd.Series([d.date() for d in df.index]).unique()
+
+    if all([nd.date() in unique_dates for nd in needed_dates]):
+        return df[start:end]
+
+
+def get_period_data(df: pd.DataFrame, period: VALID_PERIODS) -> Optional[pd.DataFrame]:
+
+    delta = df.index[-1] - df.index[0]
+
+    if delta.total_seconds() >= TIME_IN_SECONDS[period]:
+        return df
 
 
 def get_example_data():
-    api = FinanceApi(period="1y")
-    return api.download_data(tickers=["AAPL", "F"])
+
+    interval = "1m"
+    period = "1d"
+    api = FinanceApi(period=period, interval=interval)
+    data = get_stock_data(["AAPL", "F"], period=period, interval=interval, api=api)
+    return data
 
 
-def check_database():
-    pass
+def update_data_file(interval: VALID_INTERVALS = "1d", file_path: Path = None):
 
+    """Update data file with data up to current day"""
+    if file_path is None:
+        file_path = DATA_PATH / get_interval_filename(interval)
 
-class FinanceApi:
+    if file_path.exists():
+        saved_keys = keys_in_hdf(file_path)
 
-    def __init__(self,
-                 period: valid_periods = "1mo",
-                 interval: valid_intervals = "1d",
-                 start: str = None,
-                 end: str = None,
-                 group_by: str = "ticker",
-                 auto_adjust: bool = False,
-                 prepost: bool = False,
-                 threads: Union[bool, int] = True,
-                 proxy: Optional[bool] = None,
-                 **kwargs):
-        """Download financial data using yfinance API
-            :param tickers: list or string as well
-            :param period: use "period" instead of start/end
-            :param interval: fetch data by interval (including intraday if period < 60 days)
-            :param start: string with start date, used with end instead of period/interval
-            :param end: string with end date
-            :param group_by: group by ticker (to access via data['SPY'])
-                (optional, default is 'ticker')
-            :param auto_adjust: adjust all OHLC automatically
-            :param prepost: download pre/post regular market hours data
-            :param threads: use threads for mass downloading? (True/False/Integer)
-            :param proxy: use proxy server to download data
-        """
+        for stock in saved_keys:
+            df = pd.DataFrame(pd.read_hdf(file_path, key=stock))
+            start = df.index[-1] + timedelta(days=1)
+            end = datetime.now(tz=start.tz)
 
-        # Gather all function arguments to dict
-        args = locals().copy()
-
-        # If additional key word arguments passed, replace kwarg nested item with items per argument
-        if args.get("kwargs") is not None:
-            args.pop("kwargs")
-            args.update(kwargs)
-
-        # Time period must be either period/interval (default) or start/end, remove not needed keys
-        drop_keys = ("start", "end") if args.get("start") is None else ("period", "interval")
-
-        for key in drop_keys:
-            args.pop(key)
-
-        self.args = args
-
-    def download_data(self, tickers: Union[list, tuple]):
-
-        data = {}
-        for ticker in tickers:
-            data[ticker] = yf.download(ticker, **self.args)
-
-            if ticker != tickers[-1]:
-                time.sleep(1)
-
-        return data
-
-
-class YahooApi:
-
-    def __init__(self):
-
-        api_key = os.environ.get('YAHOO_FINANCE_API_KEY')
-
-        if api_key is None:
-            raise EnvironmentError(
-                "YAHOO_FINANCE_API_KEY environment variable not found, ensure it is added and refresh session"
-            )
-
-        self.headers = {'x-api-key': api_key}
-
-    def get_stock_history(self,
-                          symbols: Union[List, Tuple],
-                          period: valid_periods = "1mo",
-                          interval: valid_intervals = "1d"):
-
-        endpoint = "https://yfapi.net/v8/finance/spark"
-
-        params = {"symbols": ",".join(symbols),
-                  "period": period,
-                  "interval": interval}
-
-        return self.parse_response(self.make_request(endpoint, params=params))
-
-    def make_request(self, endpoint: str, params: Dict):
-
-        return requests.request("GET", endpoint, headers=self.headers, params=params)
-
-    @staticmethod
-    def parse_response(response):
-
-        return json.loads(response.content.decode('utf-8'))
-
-    def get_historical_data(self, stocks):
-        now = datetime.now()
-        filename = "data_" + now.strftime("%d_%b_%Y") + '.hdf5'
-
-        with h5py.File(filename, 'a') as f:
-            saved_keys = list(f.keys())
-            print(saved_keys)
-
-        dfs = {s: pd.read_hdf(filename, key=s) for s in stocks if s in saved_keys}
-        stocks = [s for s in stocks if s not in dfs.keys()]
-
-        if stocks:
-            content = self.get_stock_history(stocks, period="5y")
-
-            for stock, data in content.items():
-                data['timestamp'] = pd.to_datetime(data['timestamp'], unit='s')
-                df = dataframe_from_dict(data)
-                df.set_index('timestamp', inplace=True)
-                dfs[stock] = df
-
-                df.to_hdf(filename, key=stock, mode='a')
-
-        return dfs
+            if (end - start).total_seconds() > TIME_IN_SECONDS[interval]:
+                api = FinanceApi(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
+                api.download_data([stock], save=True)
+    else:
+        raise FileNotFoundError(f"No existing file found to update. File path: {file_path}")
 
 
 if __name__ == "__main__":
-    pass
+
+    inter = "5m"
+    get_stock_data(["MSFT", "F"], interval=inter, period="1d", start="2022-04-27", end="2022-05-03")
+    update_data_file(interval=inter)
+    get_example_data()

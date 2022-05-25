@@ -3,5 +3,6 @@
 /venv/
 /.idea
 /workspace.xml
-/*.hdf5
+**/*.hdf5
+**/wip.py
 poetry.lock

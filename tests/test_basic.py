@@ -1,8 +1,9 @@
 import unittest
 from unittest import mock
-from src.data.get_data import FinanceApi, YahooApi
-
-EXAMPLE_STOCKS = ['AAPL', 'F']
+from pathlib import Path
+from src.data.apis import FinanceApi, YahooApi
+from src.data import get_data
+from src.settings import EXAMPLE_STOCKS
 
 
 class TestFinanceApi(unittest.TestCase):
@@ -46,3 +47,10 @@ class TestYahooApi(unittest.TestCase):
             params=self.example_request["params"])
 
         self.assertEqual(response.status_code, 200)
+
+
+class TestGetData(unittest.TestCase):
+
+    def test_update_file_data(self):
+
+        self.assertRaises(FileNotFoundError, lambda: get_data.update_data_file(file_path=Path("Non_existent_file")))
