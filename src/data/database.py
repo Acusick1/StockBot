@@ -15,6 +15,6 @@ def merge_data(df: pd.DataFrame, file_path: Union[Path, str], key: str):
     stored_data = pd.read_hdf(file_path, key=key) if file_path.exists() and key in keys_in_hdf(file_path) else None
 
     if stored_data is not None:
-        df = pd.concat([stored_data, df]).drop_duplicates()
+        df = pd.concat([stored_data, df]).drop_duplicates().sort_index()
 
     df.to_hdf(str(file_path), key=key, mode='a')

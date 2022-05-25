@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Dict
 from src.data.get_data import get_example_data
 
 
@@ -34,14 +35,13 @@ def format_data(data: pd.DataFrame):
     return data
 
 
-def build(data: pd.DataFrame = None):
+def build(data: Dict[str, pd.DataFrame] = None):
     """Build features function to pipeline raw data to usable data containing features etc. within models"""
-
-    data = format_data(data)
 
     # TODO: Better way to do this, preferably without reassigning data, ideally doing so in a vectorised fashion
     # TODO: List comprehension once confident in implementation and tests built
     for stock, df in data.items():
+        df = format_data(df)
         data[stock] = add_analysis(df)
 
     return data

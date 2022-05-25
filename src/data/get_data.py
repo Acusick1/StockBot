@@ -56,10 +56,13 @@ def get_start_end_data(df: pd.DataFrame, start: str, end: str) -> Optional[pd.Da
 
 def get_period_data(df: pd.DataFrame, period: VALID_PERIODS) -> Optional[pd.DataFrame]:
 
-    delta = df.index[-1] - df.index[0]
+    database_delta = df.index[-1] - df.index[0]
+    period_seconds = TIME_IN_SECONDS[period]
 
-    if delta.total_seconds() >= TIME_IN_SECONDS[period]:
-        return df
+    if database_delta.total_seconds() >= period_seconds:
+        period_delta = timedelta(seconds=period_seconds)
+        start = df.index[-1] - period_delta
+        return df[start:]
 
 
 def get_example_data():
