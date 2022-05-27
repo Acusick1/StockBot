@@ -1,20 +1,11 @@
 import pandas as pd
-from src.settings import VALID_INTERVALS
-from src.gen import keys_in_hdf
-from pathlib import Path
-from typing import Union
 
 
-def get_interval_filename(interval: VALID_INTERVALS) -> str:
+def merge_data(df: pd.DataFrame, h5_file: pd.HDFStore, key: str):
 
-    return f"inter{interval}_data.hdf5"
-
-
-def merge_data(df: pd.DataFrame, file_path: Union[Path, str], key: str):
-
-    stored_data = pd.read_hdf(file_path, key=key) if file_path.exists() and key in keys_in_hdf(file_path) else None
+    stored_data = h5_file.get(key) if key in h5_file.keys() else None
 
     if stored_data is not None:
         df = pd.concat([stored_data, df]).drop_duplicates().sort_index()
 
-    df.to_hdf(str(file_path), key=key, mode='a')
+    h5_file.put(key, df, format="table")

@@ -1,42 +1,43 @@
 import pandas as pd
-from pathlib import Path
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from src.data.apis import FinanceApi
-from src.data.database import get_interval_filename
-from src.settings import VALID_PERIODS, VALID_INTERVALS, TIME_IN_SECONDS, DATA_PATH
-from src.gen import keys_in_hdf
+from src.gen import create_h5_key, h5_key_elements, get_key_from_value
+from src.settings import VALID_PERIODS, TIME_IN_SECONDS, STOCK_HISTORY_FILE, EXAMPLE_STOCKS
 
 # TODO: Ideally update_data_file finds the last saved entry, downloads proceeding data and appends it to HDF5 file,
 #  rather than reading in full dataset, combining and dropping duplicates. Generally, need to look into how pandas can
 #  work with HDF5 files.
 
+# TODO: get_start_end_data and get_period_data should be sub-functions of a get_data function in database.py.
+#  But before this, potentially move to a SQL/NoSQL database if hdf5 not versatile enough.
 
-def get_stock_data(stocks, interval: VALID_INTERVALS, period: VALID_PERIODS, **kwargs) -> Dict:
 
-    api = FinanceApi(interval=interval, period=period, **kwargs)
+def get_stock_data(stocks, api: FinanceApi) -> Dict:
+    # TODO: Put in api class?
+    interval = api.args["interval"]
 
     data = {}
-    file_path = DATA_PATH / get_interval_filename(interval)
-
-    saved_keys = keys_in_hdf(file_path) if file_path.exists() else None
 
     for stock in stocks:
-        if saved_keys is not None and stock in saved_keys:
-            df = pd.DataFrame(pd.read_hdf(file_path, key=stock))
 
-            start = kwargs.get("start")
-            end = kwargs.get("end")
+        key = create_h5_key(interval, stock)
 
-            if start is not None:
+        with pd.HDFStore(STOCK_HISTORY_FILE) as h5:
+            if key in h5.keys():
+                df = pd.DataFrame(h5.get(key))
 
-                data[stock] = get_start_end_data(df, start, end)
-            else:
-                data[stock] = get_period_data(df, period)
+                period = api.args.get("period")
+                start = api.args.get("start")
+                end = api.args.get("end")
+
+                if period is not None:
+                    data[stock] = get_period_data(df, period)
+                else:
+                    data[stock] = get_start_end_data(df, start, end)
 
         if stock not in data or data[stock] is None:
-            d = api.download_data([stock])
-            data.update(d)
+            data[stock] = api.make_request([stock])
 
     return data
 
@@ -69,35 +70,44 @@ def get_example_data():
 
     interval = "1m"
     period = "1d"
-    api = FinanceApi(period=period, interval=interval)
-    data = get_stock_data(["AAPL", "F"], period=period, interval=interval, api=api)
+    api = FinanceApi(interval=interval, period=period)
+    data = get_stock_data(["AAPL", "F"], api=api)
     return data
 
 
-def update_data_file(interval: VALID_INTERVALS = "1d", file_path: Path = None):
+def get_latest_entry(h5_file: pd.HDFStore, key: str):
+
+    return pd.DataFrame(h5_file.select(key, start=-1))
+
+
+def update_data_file(h5_file: pd.HDFStore, key: str):
 
     """Update data file with data up to current day"""
-    if file_path is None:
-        file_path = DATA_PATH / get_interval_filename(interval)
+    df = pd.DataFrame(h5_file.select(key, start=-2))
+    start = df.index[-1] + timedelta(days=1)
+    now = datetime.now(tz=start.tz)
 
-    if file_path.exists():
-        saved_keys = keys_in_hdf(file_path)
+    data_interval = (df.index[-1] - df.index[-2]).total_seconds()
 
-        for stock in saved_keys:
-            df = pd.DataFrame(pd.read_hdf(file_path, key=stock))
-            start = df.index[-1] + timedelta(days=1)
-            end = datetime.now(tz=start.tz)
-
-            if (end - start).total_seconds() > TIME_IN_SECONDS[interval]:
-                api = FinanceApi(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
-                api.download_data([stock], save=True)
-    else:
-        raise FileNotFoundError(f"No existing file found to update. File path: {file_path}")
+    # Difference between today's date and first date to download must be greater than the interval of collected data,
+    # and at least one day as API does not provide live data.
+    if (now - start).total_seconds() > max(data_interval, TIME_IN_SECONDS["1d"]):
+        download_key = h5_key_elements(key, index=-1)
+        interval = get_key_from_value(TIME_IN_SECONDS, int(data_interval))
+        api = FinanceApi(start=start.strftime("%Y-%m-%d"), end=now.strftime("%Y-%m-%d"), interval=interval)
+        api.make_request([download_key], save=True)
 
 
 if __name__ == "__main__":
 
     inter = "5m"
-    get_stock_data(["MSFT", "F"], interval=inter, period="1d", start="2022-04-27", end="2022-05-03")
-    update_data_file(interval=inter)
+    per = "1d"
+    keys = list(map(lambda x: create_h5_key(inter, x), EXAMPLE_STOCKS))
+    api_obj = FinanceApi(start="2022-04-27", end="2022-05-03")
+
+    get_stock_data(EXAMPLE_STOCKS, api=api_obj)
+
+    for s, k in zip(EXAMPLE_STOCKS, keys):
+        update_data_file(STOCK_HISTORY_FILE, key=k)
+
     get_example_data()

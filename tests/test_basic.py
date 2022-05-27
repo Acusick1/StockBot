@@ -1,8 +1,6 @@
 import unittest
 from unittest import mock
-from pathlib import Path
 from src.data.apis import FinanceApi, YahooApi
-from src.data import get_data
 from src.settings import EXAMPLE_STOCKS
 
 
@@ -13,14 +11,14 @@ class TestFinanceApi(unittest.TestCase):
 
     def test_download_data(self):
 
-        data = self.api.download_data(EXAMPLE_STOCKS)
+        data = self.api.make_request(EXAMPLE_STOCKS)
         self.assertTrue(all(s in data for s in EXAMPLE_STOCKS))
 
     @mock.patch('yfinance.download', return_value=None)
     @mock.patch('time.sleep', return_value=None)
     def test_download_data_calls(self, sleep, yfd):
 
-        _ = self.api.download_data(EXAMPLE_STOCKS)
+        _ = self.api.make_request(EXAMPLE_STOCKS)
         assert yfd.call_count == len(EXAMPLE_STOCKS)
         assert sleep.call_count == len(EXAMPLE_STOCKS) - 1
 
@@ -47,10 +45,3 @@ class TestYahooApi(unittest.TestCase):
             params=self.example_request["params"])
 
         self.assertEqual(response.status_code, 200)
-
-
-class TestGetData(unittest.TestCase):
-
-    def test_update_file_data(self):
-
-        self.assertRaises(FileNotFoundError, lambda: get_data.update_data_file(file_path=Path("Non_existent_file")))

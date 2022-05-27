@@ -4,5 +4,6 @@
 /.idea
 /workspace.xml
 **/*.hdf5
+**/*.h5
 **/wip.py
 poetry.lock

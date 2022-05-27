@@ -5,20 +5,20 @@ import h5py
 import time
 import pandas as pd
 import yfinance as yf
-from typing import Union, Optional, Dict, List, Tuple
+from typing import Union, Optional, Dict, List, Tuple, Any
 from datetime import datetime
-from src.gen import dataframe_from_dict, validate_date_format
-from src.data.database import merge_data, get_interval_filename
-from src.settings import VALID_PERIODS, VALID_INTERVALS, TIME_IN_SECONDS, DATA_PATH
+from src.data.database import merge_data
+from src.gen import dataframe_from_dict, validate_date_format, create_h5_key
+from src.settings import VALID_PERIODS, VALID_INTERVALS, TIME_IN_SECONDS, STOCK_HISTORY_FILE
 
 
 class FinanceApi:
 
     def __init__(self,
-                 period: VALID_PERIODS = "1mo",
                  interval: VALID_INTERVALS = "1d",
-                 start: str = None,
-                 end: str = None,
+                 period: VALID_PERIODS = "1mo",
+                 start: Optional[str] = None,
+                 end: Optional[str] = None,
                  group_by: str = "ticker",
                  auto_adjust: bool = False,
                  prepost: bool = False,
@@ -37,13 +37,25 @@ class FinanceApi:
             :param prepost: download pre/post regular market hours data
             :param threads: use threads for mass downloading? (True/False/Integer)
             :param proxy: use proxy server to download data
+            :param kwargs: additional arguments that can be passed to the API (see yfinance documentation)
         """
+
+        # TODO: Is there a better way to do this?
+        if interval not in VALID_INTERVALS:
+            raise ValueError(f"Inputs interval: {interval} must be one of: {VALID_INTERVALS}")
+
+        if period not in VALID_PERIODS:
+            raise ValueError(f"Inputs period: {period} must be one of: {VALID_PERIODS}")
 
         # Gather all function arguments to dict
         args = locals().copy()
-
-        # Replace kwarg nested item with items per argument
         args.update(args.pop("kwargs"))
+        del args["self"]
+
+        self.args = args
+
+    @staticmethod
+    def period_or_range(args: Dict[str, Any]):
 
         # Time period must be either period/interval (default) or start/end, remove not needed keys
         start = args.get("start")
@@ -57,24 +69,38 @@ class FinanceApi:
 
             args.pop("period")
 
-        self.args = args
+        return args
 
-    def download_data(self, tickers: Union[list, tuple], save=True):
+    def make_request(self, tickers: Union[list, tuple], save: bool = True, **kwargs):
+        """Make request to API for input stocks, using default parameters set during initialisation, and merge with
+        existing database data
+        :param tickers: Stocks to be downloaded.
+        :param save: Option to save downloaded data to database.
+        :param kwargs: arguments to be passed directly to API, allows additional arguments to be specified or defaults
+            overwritten.
+        """
+        # Take copy of default arguments, and update with key word arguments if passed
+        args = self.args.copy()
+
+        if kwargs:
+            args.update(kwargs)
+
+        args = self.period_or_range(args)
 
         data = {}
         for ticker in tickers:
-            output = yf.download(ticker, **self.args)
+            output = yf.download(ticker, **args)
 
             if output is not None:
                 # Ensure data is consistent. Downloading date range data will automatically append most recent days
                 # closing data (looks to be a bug in yfinance)
                 tail_delta = int((output.index[-1] - output.index[-2]).total_seconds())
-                if tail_delta != TIME_IN_SECONDS[self.args["interval"]]:
+                if tail_delta != TIME_IN_SECONDS[args["interval"]]:
                     output.drop(output.index[-1], inplace=True)
 
                 if save:
-                    file_path = DATA_PATH / get_interval_filename(self.args["interval"])
-                    merge_data(output, file_path=file_path, key=ticker)
+                    with pd.HDFStore(STOCK_HISTORY_FILE) as h5:
+                        merge_data(output, h5_file=h5, key=create_h5_key(args['interval'], ticker))
 
             data[ticker] = output
 
