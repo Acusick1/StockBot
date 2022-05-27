@@ -8,19 +8,25 @@ class TestFinanceApi(unittest.TestCase):
 
     def setUp(self) -> None:
         self.api = FinanceApi()
+        self.period = "1mo"
 
-    def test_download_data(self):
+    def test_make_request(self):
 
-        data = self.api.make_request(EXAMPLE_STOCKS)
+        data = self.api.make_request(EXAMPLE_STOCKS, period=self.period)
         self.assertTrue(all(s in data for s in EXAMPLE_STOCKS))
 
     @mock.patch('yfinance.download', return_value=None)
     @mock.patch('time.sleep', return_value=None)
-    def test_download_data_calls(self, sleep, yfd):
+    def test_make_request_calls(self, sleep, yfd):
 
-        _ = self.api.make_request(EXAMPLE_STOCKS)
+        _ = self.api.make_request(EXAMPLE_STOCKS, period=self.period)
         assert yfd.call_count == len(EXAMPLE_STOCKS)
         assert sleep.call_count == len(EXAMPLE_STOCKS) - 1
+
+    def test_make_request_failure(self):
+
+        with self.assertRaises(KeyError):
+            self.api.make_request(EXAMPLE_STOCKS)
 
 
 class TestYahooApi(unittest.TestCase):

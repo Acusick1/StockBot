@@ -8,15 +8,15 @@ import yfinance as yf
 from typing import Union, Optional, Dict, List, Tuple, Any
 from datetime import datetime
 from src.data.database import merge_data
-from src.gen import dataframe_from_dict, validate_date_format, create_h5_key
+from src.gen import dataframe_from_dict, create_h5_key, validate_date_format, validate_strict_args
 from src.settings import VALID_PERIODS, VALID_INTERVALS, TIME_IN_SECONDS, STOCK_HISTORY_FILE
 
 
 class FinanceApi:
 
     def __init__(self,
-                 interval: VALID_INTERVALS = "1d",
-                 period: VALID_PERIODS = "1mo",
+                 interval: str = "1d",
+                 period: Optional[str] = None,
                  start: Optional[str] = None,
                  end: Optional[str] = None,
                  group_by: str = "ticker",
@@ -40,12 +40,8 @@ class FinanceApi:
             :param kwargs: additional arguments that can be passed to the API (see yfinance documentation)
         """
 
-        # TODO: Is there a better way to do this?
-        if interval not in VALID_INTERVALS:
-            raise ValueError(f"Inputs interval: {interval} must be one of: {VALID_INTERVALS}")
-
-        if period not in VALID_PERIODS:
-            raise ValueError(f"Inputs period: {period} must be one of: {VALID_PERIODS}")
+        validate_strict_args(interval, options=VALID_INTERVALS, name="interval", optional=True)
+        validate_strict_args(period, options=VALID_PERIODS, name="period", optional=True)
 
         # Gather all function arguments to dict
         args = locals().copy()
@@ -60,14 +56,20 @@ class FinanceApi:
         # Time period must be either period/interval (default) or start/end, remove not needed keys
         start = args.get("start")
         end = args.get("end")
-        if start is None:
+        period = args.get("period")
+
+        if period is None:
+            if start is None:
+                raise KeyError("A period or start/end date must be provided ")
+
+            else:
+                for date in (start, end):
+                    validate_date_format(date, "%Y-%m-%d")
+
+                args.pop("period")
+        else:
             for key in ("start", "end"):
                 args.pop(key)
-        else:
-            for date in (start, end):
-                validate_date_format(date, "%Y-%m-%d")
-
-            args.pop("period")
 
         return args
 
@@ -125,8 +127,11 @@ class YahooApi:
 
     def get_stock_history(self,
                           symbols: Union[List, Tuple],
-                          period: VALID_PERIODS = "1mo",
-                          interval: VALID_INTERVALS = "1d"):
+                          period: str = "1mo",
+                          interval: str = "1d"):
+
+        validate_strict_args(interval, options=VALID_INTERVALS, name="interval")
+        validate_strict_args(period, options=VALID_PERIODS, name="period")
 
         endpoint = "https://yfapi.net/v8/finance/spark"
 

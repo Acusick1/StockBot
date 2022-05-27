@@ -3,7 +3,13 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from collections import abc
-from typing import Any, Union, Dict, List
+from typing import Any, Union, Dict, List, Tuple
+
+
+def validate_strict_args(inp: Any, options: Union[List, Tuple], name: str, optional: bool = False) -> None:
+
+    if not (inp in options or (optional and inp is None)):
+        raise ValueError(f"Inputs {name}: {inp} must be one of: {options}")
 
 
 def pct_change(data: np.array):

@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from src.data.apis import FinanceApi
-from src.gen import create_h5_key, h5_key_elements, get_key_from_value
+from src.gen import create_h5_key, h5_key_elements, get_key_from_value, validate_strict_args
 from src.settings import VALID_PERIODS, TIME_IN_SECONDS, STOCK_HISTORY_FILE, EXAMPLE_STOCKS
 
 # TODO: Ideally update_data_file finds the last saved entry, downloads proceeding data and appends it to HDF5 file,
@@ -20,6 +20,8 @@ def get_stock_data(stocks, api: FinanceApi) -> Dict:
     data = {}
 
     for stock in stocks:
+
+        # check_database(stock)
 
         key = create_h5_key(interval, stock)
 
@@ -55,7 +57,9 @@ def get_start_end_data(df: pd.DataFrame, start: str, end: str) -> Optional[pd.Da
         return df[start:end]
 
 
-def get_period_data(df: pd.DataFrame, period: VALID_PERIODS) -> Optional[pd.DataFrame]:
+def get_period_data(df: pd.DataFrame, period: str) -> Optional[pd.DataFrame]:
+
+    validate_strict_args(period, options=VALID_PERIODS, name="period")
 
     database_delta = df.index[-1] - df.index[0]
     period_seconds = TIME_IN_SECONDS[period]
