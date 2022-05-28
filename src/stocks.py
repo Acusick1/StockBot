@@ -1,5 +1,5 @@
 from datetime import datetime
-from src.gen import pct_change
+from utils.gen import pct_change
 
 
 class Transaction:

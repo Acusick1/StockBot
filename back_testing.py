@@ -2,8 +2,8 @@ import matplotlib.pyplot as plt
 from strategies.live import LiveStrategy
 from src.features import features
 from src.data.apis import FinanceApi
-from src.gen import get_subplot_shape
 from src.data.get_data import get_stock_data
+from utils.plotting import get_subplot_shape
 
 # TODO: Different data conversions for daily and live (live strat currently using daily pipeleine)
 

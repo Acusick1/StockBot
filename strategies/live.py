@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from src.gen import pct_change
+from utils.gen import pct_change
 
 matplotlib.use('TkAgg')
 

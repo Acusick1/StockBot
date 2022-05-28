@@ -8,7 +8,8 @@ import yfinance as yf
 from typing import Union, Optional, Dict, List, Tuple, Any
 from datetime import datetime
 from src.data.database import merge_data
-from src.gen import dataframe_from_dict, create_h5_key, validate_date_format, validate_strict_args
+from utils.gen import dataframe_from_dict, validate_date_format, validate_strict_args
+from utils.hdf5 import create_h5_key
 from src.settings import VALID_PERIODS, VALID_INTERVALS, TIME_IN_SECONDS, STOCK_HISTORY_FILE
 
 

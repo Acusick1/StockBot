@@ -2,7 +2,8 @@ import pandas as pd
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from src.data.apis import FinanceApi
-from src.gen import create_h5_key, h5_key_elements, get_key_from_value, validate_strict_args
+from utils.hdf5 import create_h5_key, h5_key_elements
+from utils.gen import get_key_from_value, validate_strict_args
 from src.settings import VALID_PERIODS, TIME_IN_SECONDS, STOCK_HISTORY_FILE, EXAMPLE_STOCKS
 
 # TODO: Ideally update_data_file finds the last saved entry, downloads proceeding data and appends it to HDF5 file,
