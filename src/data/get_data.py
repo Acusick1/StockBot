@@ -1,48 +1,64 @@
 import pandas as pd
-from typing import Optional, Dict
+from typing import Optional, Union, List, Tuple
 from datetime import datetime, timedelta
 from src.data.apis import FinanceApi
 from utils.hdf5 import create_h5_key, h5_key_elements
 from utils.gen import get_key_from_value, validate_strict_args
 from src.settings import VALID_PERIODS, TIME_IN_SECONDS, STOCK_HISTORY_FILE, EXAMPLE_STOCKS
 
-# TODO: Ideally update_data_file finds the last saved entry, downloads proceeding data and appends it to HDF5 file,
-#  rather than reading in full dataset, combining and dropping duplicates. Generally, need to look into how pandas can
-#  work with HDF5 files.
 
-# TODO: get_start_end_data and get_period_data should be sub-functions of a get_data function in database.py.
-#  But before this, potentially move to a SQL/NoSQL database if hdf5 not versatile enough.
+class DatabaseApi:
 
+    # TODO: Init here or variable required elsewhere?
+    data_file = STOCK_HISTORY_FILE
 
-def get_stock_data(stocks, api: FinanceApi) -> Dict:
-    # TODO: Put in api class?
-    interval = api.args["interval"]
+    def __init__(self,
+                 api: FinanceApi,
+                 interval: str = "1d",
+                 period: Optional[str] = None,
+                 start: Optional[str] = None,
+                 end: Optional[str] = None,
+                 ):
 
-    data = {}
+        self.api = api
+        self.interval = interval
+        self.period = period
+        self.start = start
+        self.end = end
 
-    for stock in stocks:
+    def get_data(self, tickers: Union[List, Tuple]):
 
-        # check_database(stock)
+        data = {}
 
-        key = create_h5_key(interval, stock)
+        for tick in tickers:
 
-        with pd.HDFStore(STOCK_HISTORY_FILE) as h5:
+            data[tick] = self.check_database(tick)
+
+            if data[tick] is None:
+                data.update(
+                    self.api.make_request([tick],
+                                          interval=self.interval,
+                                          period=self.period,
+                                          start=self.start,
+                                          end=self.end)
+                )
+
+        return data
+
+    def check_database(self, ticker):
+
+        key = create_h5_key(self.interval, ticker)
+
+        with pd.HDFStore(self.data_file) as h5:
             if key in h5.keys():
                 df = pd.DataFrame(h5.get(key))
 
-                period = api.args.get("period")
-                start = api.args.get("start")
-                end = api.args.get("end")
-
-                if period is not None:
-                    data[stock] = get_period_data(df, period)
+                if self.period is not None:
+                    data = get_period_data(df, self.period)
                 else:
-                    data[stock] = get_start_end_data(df, start, end)
+                    data = get_start_end_data(df, self.start, self.end)
 
-        if stock not in data or data[stock] is None:
-            data[stock] = api.make_request([stock])
-
-    return data
+                return data
 
 
 def get_start_end_data(df: pd.DataFrame, start: str, end: str) -> Optional[pd.DataFrame]:
@@ -75,8 +91,9 @@ def get_example_data():
 
     interval = "1m"
     period = "1d"
-    api = FinanceApi(interval=interval, period=period)
-    data = get_stock_data(["AAPL", "F"], api=api)
+    api = FinanceApi()
+    database = DatabaseApi(interval=interval, period=period, api=api)
+    data = database.get_data(["AAPL", "F"])
     return data
 
 
@@ -103,14 +120,30 @@ def update_data_file(h5_file: pd.HDFStore, key: str):
         api.make_request([download_key], save=True)
 
 
+def clean_data():
+
+    with pd.HDFStore(STOCK_HISTORY_FILE) as h5:
+
+        for key in h5.keys():
+
+            df = pd.DataFrame(h5.get(key))
+            df = df.drop_duplicates().sort_index()
+
+            # TODO: Could download data again, but should this be done here or just removed?
+            # Have to drop duplicate indices, no way to know which is truth
+            df = df[~df.index.duplicated(False)]
+
+            h5.put(key=key, value=df)
+
+
 if __name__ == "__main__":
 
     inter = "5m"
     per = "1d"
     keys = list(map(lambda x: create_h5_key(inter, x), EXAMPLE_STOCKS))
-    api_obj = FinanceApi(start="2022-04-27", end="2022-05-03")
-
-    get_stock_data(EXAMPLE_STOCKS, api=api_obj)
+    api_obj = FinanceApi()
+    database_obj = DatabaseApi(start="2022-04-27", end="2022-05-03", api=api_obj)
+    database_obj.get_data(EXAMPLE_STOCKS)
 
     for s, k in zip(EXAMPLE_STOCKS, keys):
         update_data_file(STOCK_HISTORY_FILE, key=k)

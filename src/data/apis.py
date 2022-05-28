@@ -61,7 +61,7 @@ class FinanceApi:
 
         if period is None:
             if start is None:
-                raise KeyError("A period or start/end date must be provided ")
+                raise KeyError("A period or start/end date must be provided.")
 
             else:
                 for date in (start, end):
