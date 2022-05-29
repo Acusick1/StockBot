@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sbn
 from matplotlib import ticker
 from typing import Union, Dict, List, Tuple
-from settings import EXAMPLE_STOCKS, VALID_PERIODS, VALID_INTERVALS
+from src.settings import EXAMPLE_STOCKS, VALID_PERIODS, VALID_INTERVALS, TIME_MAPPINGS
 from src.data.get_data import DatabaseApi
 from src.data.apis import FinanceApi
 from utils.plotting import get_subplot_shape
@@ -65,11 +65,14 @@ def main():
     period = st.session_state.period_picker
     interval = st.session_state.interval_picker
 
-    database = DatabaseApi(api=api, period=period, interval=interval)
+    try:
+        database = DatabaseApi(api=api, period=period, interval=TIME_MAPPINGS[interval])
+        if tickers:
+            df = load_data(tickers, database=database)
+            plot_stock(df)
 
-    if tickers:
-        df = load_data(tickers, database=database)
-        plot_stock(df)
+    except AssertionError:
+        st.write("Interval must be less than period")
 
 
 if __name__ == "__main__":

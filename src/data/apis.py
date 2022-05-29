@@ -7,10 +7,8 @@ import pandas as pd
 import yfinance as yf
 from typing import Union, Optional, Dict, List, Tuple, Any
 from datetime import datetime
-from src.data.database import merge_data
 from utils.gen import dataframe_from_dict, validate_date_format, validate_strict_args
-from utils.hdf5 import create_h5_key
-from src.settings import VALID_PERIODS, VALID_INTERVALS, TIME_IN_SECONDS, STOCK_HISTORY_FILE
+from src.settings import VALID_PERIODS, VALID_INTERVALS
 
 
 class FinanceApi:
@@ -74,11 +72,10 @@ class FinanceApi:
 
         return args
 
-    def make_request(self, tickers: Union[list, tuple], save: bool = True, **kwargs):
+    def make_request(self, tickers: Union[list, tuple], **kwargs):
         """Make request to API for input stocks, using default parameters set during initialisation, and merge with
-        existing database data
+        existing database data.
         :param tickers: Stocks to be downloaded.
-        :param save: Option to save downloaded data to database.
         :param kwargs: arguments to be passed directly to API, allows additional arguments to be specified or defaults
             overwritten.
         """
@@ -97,13 +94,10 @@ class FinanceApi:
             if output is not None:
                 # Ensure data is consistent. Downloading date range data will automatically append most recent days
                 # closing data (looks to be a bug in yfinance)
+                head_delta = int((output.index[1] - output.index[0]).total_seconds())
                 tail_delta = int((output.index[-1] - output.index[-2]).total_seconds())
-                if tail_delta != TIME_IN_SECONDS[args["interval"]]:
+                if tail_delta != head_delta:
                     output.drop(output.index[-1], inplace=True)
-
-                if save:
-                    with pd.HDFStore(STOCK_HISTORY_FILE) as h5:
-                        merge_data(output, h5_file=h5, key=create_h5_key(args['interval'], ticker))
 
             data[ticker] = output
 

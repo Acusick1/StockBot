@@ -5,18 +5,40 @@ from collections import abc
 from typing import Any, Union, Dict, List, Tuple
 
 
-def validate_strict_args(inp: Any, options: Union[List, Tuple], name: str, optional: bool = False) -> None:
+def trading_day_range(bday_start=None, bday_end=None, bday_freq='B',
+                      open_time='09:30', close_time='16:00', iday_freq='15T', weekmask=None, tz=None):
+    # TODO: Refactor and clean
+    if bday_start is None:
+        bday_start = pd.Timestamp.today()
+    if bday_end is None:
+        bday_end = bday_start + pd.Timedelta(days=1)
 
+    for i, d in enumerate(pd.bdate_range(start=bday_start, end=bday_end, freq=bday_freq, weekmask=weekmask)):
+        topen = pd.Timestamp(open_time)
+        d1 = d.replace(hour=topen.hour, minute=topen.minute)
+        tclose = pd.Timestamp(close_time)
+        d2 = d.replace(hour=tclose.hour, minute=tclose.minute)
+
+        day = pd.date_range(d1, d2, freq=iday_freq, tz=tz)
+
+        if i == 0:
+            index = day
+        else:
+            index = index.union(day)
+
+    return index
+
+
+def validate_strict_args(inp: Any, options: Union[List, Tuple], name: str, optional: bool = False) -> None:
     if not (inp in options or (optional and inp is None)):
         raise ValueError(f"Inputs {name}: {inp} must be one of: {options}")
 
 
 def pct_change(data: np.array):
-
     if len(data) == 1:
         out = 0
     else:
-        out = (data[1:] - data[:-1])/data[:-1]
+        out = (data[1:] - data[:-1]) / data[:-1]
 
     return out
 
@@ -37,12 +59,10 @@ def dataframe_from_dict(d: dict) -> pd.DataFrame:
 
 
 def get_key_from_value(d: Dict[str, Any], v: Any):
-
     return list(d.keys())[list(d.values()).index(v)]
 
 
 def validate_date_format(inp: str, form: str = '%Y-%m-%d'):
-
     try:
         datetime.strptime(inp, form)
     except ValueError:
