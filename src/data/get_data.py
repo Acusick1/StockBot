@@ -3,8 +3,8 @@ from typing import Optional, Union, List, Tuple
 from datetime import datetime, timedelta
 from src.data.apis import FinanceApi
 from utils.hdf5 import create_h5_key, h5_key_elements
-from utils.gen import validate_strict_args, trading_day_range
-from src.settings import VALID_PERIODS, VALID_INTERVALS, STOCK_HISTORY_FILE, EXAMPLE_STOCKS, TIME_MAPPINGS, Interval
+from utils.gen import trading_day_range
+from src.settings import STOCK_HISTORY_FILE, EXAMPLE_STOCKS, TIME_MAPPINGS, Interval
 
 
 class DatabaseApi:
@@ -16,106 +16,121 @@ class DatabaseApi:
     def __init__(self,
                  api: FinanceApi,
                  interval: Interval = TIME_MAPPINGS["1d"],
-                 period: Optional[str] = None,
+                 period: Optional[Interval] = None,
                  start: Optional[str] = None,
                  end: Optional[str] = None,
                  ):
 
         self.api = api
         self.interval = interval
-        self.period = period
-        self.start = start
-        self.end = end
+        # self.period = period
+        self.start = start if start is None else datetime.strptime(start, self.date_fmt).date()
+        self.end = end if end is None else datetime.strptime(end, self.date_fmt).date()
 
+        if period is not None:
+            self.period_to_dates(period)
+
+        self.clean_dates()
         self.validate_request()
 
-    def get_data(self, tickers: Union[List, Tuple], save=True):
+    def period_to_dates(self, period):
+
+        delta = period.delta
+
+        if self.start is not None:
+            self.end = self.start + delta
+        else:
+            if self.end is None:
+                self.end = datetime.today().date()
+
+            self.start = self.end - delta
+
+    def clean_dates(self):
+
+        # Using yesterday as max end time since data does not update live
+        max_end_time = datetime.today().date() - timedelta(days=1)
+
+        if self.end > max_end_time:
+            self.end = max_end_time
+
+        # If start date is a weekend, set to following Monday
+        if self.start.isoweekday() in {6, 7}:
+            self.start += timedelta(days=8 - self.start.isoweekday())
+
+        # If end date is a weekend, set to previous Friday
+        if self.end.isoweekday() in {6, 7}:
+            self.end -= timedelta(days=self.end.isoweekday() - 5)
+
+    def get_data(self, tickers: Union[List, Tuple]):
 
         data = {}
 
         for tick in tickers:
 
             key = create_h5_key(self.interval.base.key, tick)
-            data[tick] = self.check_database(key)
+            failures = (True, True)
 
-            if data[tick] is None:
-                response = self.api.make_request(
-                    [tick],
-                    interval=self.interval.base.value,
-                    period=self.period,
-                    start=self.start,
-                    end=self.end)
+            with pd.HDFStore(self.data_file) as h5:
+                if key in h5.keys():
 
-                if save:
-                    with pd.HDFStore(self.data_file) as h5:
+                    first = pd.DataFrame(h5.select(key, stop=1)).index[0].date()
+                    last = pd.DataFrame(h5.select(key, start=-1)).index[0].date()
+
+                    failures = (first > self.start, last < self.end)
+
+                if any(failures):
+
+                    start = self.start
+                    end = self.end
+
+                    if all(failures):
+                        pass
+                    elif failures[0]:
+                        end = first
+                    elif failures[1]:
+                        start = last + timedelta(days=1)
+
+                    response = self.api.make_request(
+                        [tick],
+                        interval=self.interval.base.value,
+                        start=start.strftime(self.date_fmt),
+                        end=(end + timedelta(days=1)).strftime(self.date_fmt)
+                    )
+
+                    if failures[1]:
+                        h5.append(key, response[tick])
+                    else:
                         merge_data(response[tick], h5_file=h5, key=key)
 
-                # TODO: Calling database again since API is called with base interval and may need to be filtered.
-                #  Filtering should therefore probably be done separately, not within get_period/start_end_data
-                data[tick] = self.check_database(key)
+                df = pd.DataFrame(h5.select(key, where=["index>=self.start & index<=self.end"]))
+
+                if self.interval.dfreq in ["B", None] and self.interval.ifreq in ["T", None]:
+                    data[tick] = df
+                else:
+                    data[tick] = self.filter_data(df)
 
         return data
 
-    def check_database(self, key):
+    def filter_data(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
 
-        with pd.HDFStore(self.data_file) as h5:
-            if key in h5.keys():
-                df = pd.DataFrame(h5.get(key))
+        keep = trading_day_range(
+            bday_start=self.start,
+            bday_end=self.end,
+            bday_freq=self.interval.dfreq,
+            iday_freq=self.interval.ifreq,
+            tz=df.index[0].tz
+        )
 
-                if self.period is not None:
-                    data = self.get_period_data(df)
-                else:
-                    data = self.get_start_end_data(df)
+        df = df.filter(items=keep, axis=0).dropna()
 
-                return data
-
-    def get_start_end_data(self, df: pd.DataFrame, bdays=True) -> Optional[pd.DataFrame]:
-
-        if bdays:
-            needed_dates = pd.bdate_range(start=self.start, end=self.end, freq=self.interval.dfreq, inclusive="left")
-        else:
-            needed_dates = pd.date_range(start=self.start, end=self.end, freq=self.interval.dfreq, inclusive="left")
-
-        # TODO: Changed with inclusive, validate expected behaviour
-        # Data only stored up to (not including) end date, so remove last date if more than one date requested
-        # if len(needed_dates) > 1:
-        #    needed_dates = needed_dates.drop(needed_dates[-1])
-
-        unique_dates = pd.Series([d.date() for d in df.index]).unique()
-
-        if all([nd.date() in unique_dates for nd in needed_dates]):
-
-            if self.interval.base.value == "1m":
-                keep = trading_day_range(bday_start=self.start, bday_end=self.end, tz=df.index[0].tz)
-            else:
-                keep = needed_dates
-
-            df = df.filter(items=keep, axis=0).dropna()
-
-            return df
-
-    def get_period_data(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
-        # TODO: Filter as in start_end_func (abstract)
-        database_delta = df.index[-1] - df.index[0]
-        period_seconds = TIME_MAPPINGS[self.period].delta.total_seconds()
-
-        if database_delta.total_seconds() >= period_seconds:
-            period_delta = timedelta(seconds=period_seconds)
-            start = df.index[-1] - period_delta
-            return df[start:]
+        return df
 
     def validate_request(self):
-        # TODO: Does validation interval.base make sense, and should intervals be wrapped in TIME_MAPPINGS?
-        validate_strict_args(self.interval.base.value, options=VALID_INTERVALS, name="interval")
-        validate_strict_args(self.period, options=VALID_PERIODS, name="period", optional=True)
 
-        if self.period is not None:
-            p = TIME_MAPPINGS[self.period].delta.total_seconds()
-        else:
-            p = (datetime.strptime(self.end, self.date_fmt) -
-                 datetime.strptime(self.start, self.date_fmt)).total_seconds()
-
-        assert p >= self.interval.delta.total_seconds() * 2
+        # If interval is minutes/hours then this will always be true, but have to skip as adding delta will change
+        # right-hand side from date to datetime.
+        if not any((self.interval.delta.minutes, self.interval.delta.hours)):
+            assert self.end > self.start + self.interval.delta
 
 
 def get_example_data():
@@ -123,7 +138,7 @@ def get_example_data():
     interval = "1m"
     period = "1d"
     api = FinanceApi()
-    database = DatabaseApi(interval=TIME_MAPPINGS[interval], period=period, api=api)
+    database = DatabaseApi(interval=TIME_MAPPINGS[interval], period=TIME_MAPPINGS[period], api=api)
     data = database.get_data(["AAPL", "F"])
     return data
 
@@ -131,6 +146,11 @@ def get_example_data():
 def get_latest_entry(h5_file: pd.HDFStore, key: str):
 
     return pd.DataFrame(h5_file.select(key, start=-1))
+
+
+def append_data(df: pd.DataFrame, h5_file: pd.HDFStore, key: str):
+
+    h5_file.append(key, df)
 
 
 def merge_data(df: pd.DataFrame, h5_file: pd.HDFStore, key: str):
@@ -182,6 +202,10 @@ if __name__ == "__main__":
     per = "1d"
     keys = list(map(lambda x: create_h5_key(inter, x), EXAMPLE_STOCKS))
     api_obj = FinanceApi()
+
+    database_obj = DatabaseApi(period=TIME_MAPPINGS["1mo"], interval=TIME_MAPPINGS["1d"], api=api_obj)
+    database_obj.get_data(EXAMPLE_STOCKS)
+
     database_obj = DatabaseApi(start="2022-05-20", end="2022-05-27", interval=TIME_MAPPINGS[inter], api=api_obj)
     database_obj.get_data(EXAMPLE_STOCKS)
 

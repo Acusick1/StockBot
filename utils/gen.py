@@ -5,19 +5,21 @@ from collections import abc
 from typing import Any, Union, Dict, List, Tuple
 
 
-def trading_day_range(bday_start=None, bday_end=None, bday_freq='B',
-                      open_time='09:30', close_time='16:00', iday_freq='15T', weekmask=None, tz=None):
+def trading_day_range(bday_start=datetime.date,
+                      bday_end=datetime.date,
+                      bday_freq="B",
+                      iday_freq="T",
+                      weekmask=None,
+                      tz=None):
     # TODO: Refactor and clean
-    if bday_start is None:
-        bday_start = pd.Timestamp.today()
-    if bday_end is None:
-        bday_end = bday_start + pd.Timedelta(days=1)
+
+    open_time = datetime.strptime("09:30", "%H:%M").time()
+    close_time = datetime.strptime("16:00", "%H:%M").time()
 
     for i, d in enumerate(pd.bdate_range(start=bday_start, end=bday_end, freq=bday_freq, weekmask=weekmask)):
-        topen = pd.Timestamp(open_time)
-        d1 = d.replace(hour=topen.hour, minute=topen.minute)
-        tclose = pd.Timestamp(close_time)
-        d2 = d.replace(hour=tclose.hour, minute=tclose.minute)
+
+        d1 = d.replace(hour=open_time.hour, minute=open_time.minute)
+        d2 = d.replace(hour=close_time.hour, minute=close_time.minute)
 
         day = pd.date_range(d1, d2, freq=iday_freq, tz=tz)
 

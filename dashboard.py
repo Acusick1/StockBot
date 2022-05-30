@@ -21,7 +21,7 @@ def load_data(tickers: Union[List, Tuple], database: DatabaseApi):
 def plot_stock(data: Dict):
 
     def format_date(x, pos=None):
-        thisind = np.clip(int(x + 0.5), 0, N - 1)
+        thisind = np.clip(int(x + 0.5), 0, nums - 1)
         return df.index[thisind].strftime('%Y-%m-%d %H:%M')
 
     subplot_shape = get_subplot_shape(len(data.keys()))
@@ -36,10 +36,10 @@ def plot_stock(data: Dict):
     i = 0
     for stock, df in data.items():
 
-        N = np.arange(df.shape[0])
+        nums = np.arange(df.shape[0])
         plt.sca(ax[i])
         ax[i].set_title(stock)
-        sbn.lineplot(x=N, y=df["Adj Close"])
+        sbn.lineplot(x=nums, y=df["Adj Close"])
         # ax[i].xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
         i += 1
 
@@ -66,7 +66,7 @@ def main():
     interval = st.session_state.interval_picker
 
     try:
-        database = DatabaseApi(api=api, period=period, interval=TIME_MAPPINGS[interval])
+        database = DatabaseApi(api=api, period=TIME_MAPPINGS[period], interval=TIME_MAPPINGS[interval])
         if tickers:
             df = load_data(tickers, database=database)
             plot_stock(df)

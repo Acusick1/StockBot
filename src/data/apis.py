@@ -6,12 +6,14 @@ import time
 import pandas as pd
 import yfinance as yf
 from typing import Union, Optional, Dict, List, Tuple, Any
-from datetime import datetime
-from utils.gen import dataframe_from_dict, validate_date_format, validate_strict_args
+from datetime import datetime, timedelta
+from utils.gen import dataframe_from_dict, validate_strict_args
 from src.settings import VALID_PERIODS, VALID_INTERVALS
 
 
 class FinanceApi:
+
+    date_fmt = "%Y-%m-%d"
 
     def __init__(self,
                  interval: str = "1d",
@@ -44,8 +46,10 @@ class FinanceApi:
 
         # Gather all function arguments to dict
         args = locals().copy()
-        args.update(args.pop("kwargs"))
+        args.update(kwargs)
+
         del args["self"]
+        del args["kwargs"]
 
         self.args = args
 
@@ -54,7 +58,6 @@ class FinanceApi:
 
         # Time period must be either period/interval (default) or start/end, remove not needed keys
         start = args.get("start")
-        end = args.get("end")
         period = args.get("period")
 
         if period is None:
@@ -62,9 +65,6 @@ class FinanceApi:
                 raise KeyError("A period or start/end date must be provided.")
 
             else:
-                for date in (start, end):
-                    validate_date_format(date, "%Y-%m-%d")
-
                 args.pop("period")
         else:
             for key in ("start", "end"):
@@ -80,24 +80,36 @@ class FinanceApi:
             overwritten.
         """
         # Take copy of default arguments, and update with key word arguments if passed
-        args = self.args.copy()
+        request = self.args.copy()
 
         if kwargs:
-            args.update(kwargs)
+            request.update(kwargs)
 
-        args = self.period_or_range(args)
+        request = self.period_or_range(request)
+
+        # Adding day to requested dates as yfinance seems to be a day off for day requests
+        if "d" in request["interval"]:
+
+            for key in ("start", "end"):
+                date = request.get(key)
+
+                if date is not None:
+                    next_day = datetime.strptime(date, FinanceApi.date_fmt) + timedelta(days=1)
+                    request[key] = next_day.strftime(FinanceApi.date_fmt)
 
         data = {}
         for ticker in tickers:
-            output = yf.download(ticker, **args)
+            output = yf.download(ticker, **request)
 
             if output is not None:
-                # Ensure data is consistent. Downloading date range data will automatically append most recent days
-                # closing data (looks to be a bug in yfinance)
-                head_delta = int((output.index[1] - output.index[0]).total_seconds())
-                tail_delta = int((output.index[-1] - output.index[-2]).total_seconds())
-                if tail_delta != head_delta:
-                    output.drop(output.index[-1], inplace=True)
+
+                if output.shape[0] > 2:
+                    # Ensure data is consistent. Downloading date range data will automatically append most recent days
+                    # closing data (looks to be a bug in yfinance)
+                    head_delta = int((output.index[1] - output.index[0]).total_seconds())
+                    tail_delta = int((output.index[-1] - output.index[-2]).total_seconds())
+                    if tail_delta != head_delta:
+                        output.drop(output.index[-1], inplace=True)
 
             data[ticker] = output
 

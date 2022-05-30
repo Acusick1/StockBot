@@ -44,5 +44,9 @@ class TestDatabaseApi(unittest.TestCase):
 
     def test_invalid_requests(self):
         api = FinanceApi()
-        self.assertRaises(AssertionError, lambda: DatabaseApi(api=api, interval=TIME_MAPPINGS["5d"], period="1d"))
-        self.assertRaises(AssertionError, lambda: DatabaseApi(api=api, interval=TIME_MAPPINGS["1d"], period="1d"))
+        self.assertRaises(AssertionError,
+                          lambda: DatabaseApi(api=api, interval=TIME_MAPPINGS["5d"], period=TIME_MAPPINGS["1d"])
+                          )
+        self.assertRaises(AssertionError,
+                          lambda: DatabaseApi(api=api, interval=TIME_MAPPINGS["1d"], period=TIME_MAPPINGS["1d"])
+                          )
