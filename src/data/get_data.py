@@ -5,6 +5,7 @@ from src.data.apis import FinanceApi
 from utils.hdf5 import create_h5_key, h5_key_elements
 from utils.gen import trading_day_range
 from src.settings import STOCK_HISTORY_FILE, EXAMPLE_STOCKS, TIME_MAPPINGS, Interval
+from pandas.tseries.offsets import BDay
 
 
 class DatabaseApi:
@@ -17,15 +18,15 @@ class DatabaseApi:
                  api: FinanceApi,
                  interval: Interval = TIME_MAPPINGS["1d"],
                  period: Optional[Interval] = None,
-                 start: Optional[str] = None,
-                 end: Optional[str] = None,
+                 start: Optional[datetime] = None,
+                 end: Optional[datetime] = None,
                  ):
 
         self.api = api
         self.interval = interval
         # self.period = period
-        self.start = start if start is None else datetime.strptime(start, self.date_fmt).date()
-        self.end = end if end is None else datetime.strptime(end, self.date_fmt).date()
+        self.start = start
+        self.end = end
 
         if period is not None:
             self.period_to_dates(period)
@@ -41,14 +42,14 @@ class DatabaseApi:
             self.end = self.start + delta
         else:
             if self.end is None:
-                self.end = datetime.today().date()
+                self.end = datetime.today()
 
             self.start = self.end - delta
 
     def clean_dates(self):
 
         # Using yesterday as max end time since data does not update live
-        max_end_time = datetime.today().date() - timedelta(days=1)
+        max_end_time = datetime.today() - timedelta(days=1)
 
         if self.end > max_end_time:
             self.end = max_end_time
@@ -76,7 +77,7 @@ class DatabaseApi:
                     first = pd.DataFrame(h5.select(key, stop=1)).index[0].date()
                     last = pd.DataFrame(h5.select(key, start=-1)).index[0].date()
 
-                    failures = (first > self.start, last < self.end)
+                    failures = (first > self.start.date(), last < self.end.date())
 
                 if any(failures):
 
@@ -97,22 +98,23 @@ class DatabaseApi:
                         end=(end + timedelta(days=1)).strftime(self.date_fmt)
                     )
 
-                    if failures[1]:
-                        h5.append(key, response[tick])
+                    if not response[tick].empty:
+                        if failures[1]:
+                            h5.append(key, response[tick])
+                        else:
+                            merge_data(response[tick], h5_file=h5, key=key)
+
+                    df = pd.DataFrame(h5.select(key, where=["index>=self.start & index<=self.end"]))
+
+                    if df.empty or (self.interval.dfreq in ["B", None] and self.interval.ifreq in ["T", None]):
+                        data[tick] = df
                     else:
-                        merge_data(response[tick], h5_file=h5, key=key)
-
-                df = pd.DataFrame(h5.select(key, where=["index>=self.start & index<=self.end"]))
-
-                if self.interval.dfreq in ["B", None] and self.interval.ifreq in ["T", None]:
-                    data[tick] = df
-                else:
-                    data[tick] = self.filter_data(df)
+                        data[tick] = self.filter_data(df)
 
         return data
 
     def filter_data(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
-
+        # TODO: Do this in advance rather than recreating filter range for every ticker
         keep = trading_day_range(
             bday_start=self.start,
             bday_end=self.end,
@@ -129,7 +131,7 @@ class DatabaseApi:
 
         # If interval is minutes/hours then this will always be true, but have to skip as adding delta will change
         # right-hand side from date to datetime.
-        if not any((self.interval.delta.minutes, self.interval.delta.hours)):
+        if isinstance(self.interval.delta, BDay) or not any((self.interval.delta.minutes, self.interval.delta.hours)):
             assert self.end > self.start + self.interval.delta
 
 
@@ -203,13 +205,24 @@ if __name__ == "__main__":
     keys = list(map(lambda x: create_h5_key(inter, x), EXAMPLE_STOCKS))
     api_obj = FinanceApi()
 
+    # TODO: Replace these with tests!
     database_obj = DatabaseApi(period=TIME_MAPPINGS["1mo"], interval=TIME_MAPPINGS["1d"], api=api_obj)
     database_obj.get_data(EXAMPLE_STOCKS)
 
-    database_obj = DatabaseApi(start="2022-05-20", end="2022-05-27", interval=TIME_MAPPINGS[inter], api=api_obj)
+    database_obj = DatabaseApi(
+        start=datetime.strptime("2022-05-20", DatabaseApi.date_fmt),
+        end=datetime.strptime("2022-05-27", DatabaseApi.date_fmt),
+        interval=TIME_MAPPINGS[inter],
+        api=api_obj)
+
     database_obj.get_data(EXAMPLE_STOCKS)
 
-    database_obj = DatabaseApi(start="2022-03-20", end="2022-05-27", interval=TIME_MAPPINGS["5d"], api=api_obj)
+    database_obj = DatabaseApi(
+        start=datetime.strptime("2022-03-20", DatabaseApi.date_fmt),
+        end=datetime.strptime("2022-05-27", DatabaseApi.date_fmt),
+        interval=TIME_MAPPINGS["5d"],
+        api=api_obj)
+
     database_obj.get_data(EXAMPLE_STOCKS)
 
     for s, k in zip(EXAMPLE_STOCKS, keys):

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sbn
@@ -65,13 +66,17 @@ def main():
     period = st.session_state.period_picker
     interval = st.session_state.interval_picker
 
-    try:
+    valid_times = pd.unique([*VALID_INTERVALS, *VALID_PERIODS])
+
+    if np.where(valid_times == interval) < np.where(valid_times == period):
         database = DatabaseApi(api=api, period=TIME_MAPPINGS[period], interval=TIME_MAPPINGS[interval])
         if tickers:
             df = load_data(tickers, database=database)
-            plot_stock(df)
 
-    except AssertionError:
+            if df is not None:
+                plot_stock(df)
+
+    else:
         st.write("Interval must be less than period")
 
 

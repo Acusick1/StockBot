@@ -1,6 +1,8 @@
 from pathlib import Path
 from collections import OrderedDict
+from typing import Union
 from dateutil.relativedelta import relativedelta
+from pandas.tseries.offsets import BDay
 
 DATA_PATH = Path(Path(__file__).parent.resolve(), "data", "files")
 STOCK_HISTORY_FILE = str(DATA_PATH / "stock_history.h5")
@@ -23,9 +25,9 @@ class Interval:
 
     def __init__(self,
                  base: BaseInterval,
-                 delta: relativedelta,
+                 delta: Union[relativedelta, BDay],
                  dfreq: str = "B",
-                 ifreq: str = "T"):
+                 ifreq: str = None):
 
         self.base = base
         self.delta = delta
@@ -45,8 +47,8 @@ TIME_MAPPINGS["5m"] = Interval(base=minute_base, delta=relativedelta(minutes=5),
 TIME_MAPPINGS["15m"] = Interval(base=minute_base, delta=relativedelta(minutes=15), ifreq="15T")
 TIME_MAPPINGS["30m"] = Interval(base=minute_base, delta=relativedelta(minutes=30), ifreq="30T")
 TIME_MAPPINGS["1h"] = Interval(base=minute_base, delta=relativedelta(minutes=60), ifreq="60T")
-TIME_MAPPINGS["1d"] = Interval(base=daily_base, delta=relativedelta(days=1), dfreq="B")
-TIME_MAPPINGS["5d"] = Interval(base=daily_base, delta=relativedelta(days=5), dfreq="5B")
+TIME_MAPPINGS["1d"] = Interval(base=daily_base, delta=BDay(1), dfreq="B")
+TIME_MAPPINGS["5d"] = Interval(base=daily_base, delta=BDay(5), dfreq="5B")
 TIME_MAPPINGS["1mo"] = Interval(base=daily_base, delta=relativedelta(months=1), dfreq="M")
 TIME_MAPPINGS["3mo"] = Interval(base=daily_base, delta=relativedelta(months=3), dfreq="3M")
 TIME_MAPPINGS["6mo"] = Interval(base=daily_base, delta=relativedelta(months=6), dfreq="6M")
