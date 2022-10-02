@@ -1,9 +1,9 @@
 import pandas as pd
 from typing import Optional
 from datetime import datetime, timedelta
-from src.api import schemas
-from src.api.apis import FinanceApi
+from src.api.main import FinanceApi
 from src.api.gen import get_base_period
+from src.db import schemas
 from utils.hdf5 import get_h5_key, h5_key_elements
 from utils.gen import trading_day_range
 from config import settings

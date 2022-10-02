@@ -2,9 +2,9 @@ import requests
 import json
 import pandas as pd
 import yfinance as yf
-from typing import Union, Optional, Dict
 from datetime import timedelta
-from src.api import schemas
+from typing import Union, Optional, Dict
+from src.db import schemas
 from config import yahoo_api_settings
 
 

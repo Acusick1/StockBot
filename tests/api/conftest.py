@@ -1,8 +1,8 @@
 import pytest
 from datetime import datetime
 from pandas.tseries.offsets import BDay
-from src.api import schemas
-from src.api.apis import YahooApi, FinanceApi
+from src.api.main import YahooApi, FinanceApi
+from src.db import schemas
 from config import EXAMPLE_STOCKS
 
 last_bday = datetime.today() - BDay(1)

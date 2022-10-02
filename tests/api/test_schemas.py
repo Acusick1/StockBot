@@ -1,5 +1,5 @@
 import pytest
-from src.api import schemas
+from src.db import schemas
 from datetime import datetime, timedelta
 
 today = datetime.today()

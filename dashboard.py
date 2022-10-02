@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import seaborn as sbn
 from datetime import datetime
 from typing import Dict
-from src.api.schemas import RequestBase, valid_intervals, valid_periods
-from src.api.get_data import DatabaseApi
-from src.api.apis import FinanceApi
+from src.api.main import FinanceApi
+from src.db.schemas import RequestBase, valid_intervals, valid_periods
+from src.db.main import DatabaseApi
 from utils.plotting import get_subplot_shape
 from config import EXAMPLE_STOCKS
 

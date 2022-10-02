@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 from pandas import HDFStore
 from config import settings
-from src.api import schemas
-from src.api.get_data import DatabaseApi
+from src.db import schemas
+from src.db.main import DatabaseApi
 
 
 def test_get_data():
