@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from typing import Optional
 from datetime import datetime, timedelta
@@ -113,3 +114,17 @@ def clean_data():
             df = df.drop_duplicates().sort_index()
 
             h5.put(key=key, value=df)
+
+
+def create_fake_data(request: schemas.RequestBase):
+
+    index = trading_day_range(
+        bday_start=request.start_date,
+        bday_end=request.end_date,
+        iday_freq=request.interval.ifreq
+    )
+
+    columns = ["Open", "Close", "Adj Close", "Volume"]
+
+    data = np.random.rand(index.shape[0], len(columns))
+    return pd.DataFrame(data, columns=columns, index=index)
