@@ -36,7 +36,7 @@ class Interval(BaseModel):
         elif unit == "d":
             return Interval(key=interval, delta=timedelta(days=num), dfreq=f"{num}B")
         elif unit == "mo":
-            return Interval(key=interval, delta=timedelta(days=30), dfreq=f"{num}M")
+            return Interval(key=interval, delta=timedelta(days=num*30), dfreq=f"{num}M")
         elif unit == "y":
             return Interval(key=interval, delta=timedelta(days=365), dfreq=f"{num * 12}M")
         else:
@@ -91,6 +91,15 @@ class RequestBase(BaseModel):
         interval = values.get("interval")
 
         if period:
+
+            # Special case "max" = undefined start date
+            if period == "max":
+                start_date = None
+                end_date = datetime.today()
+
+            # Special case year-to-date = start from beginning of year
+            if period == "ytd":
+                start_date = datetime.today().replace(month=1, day=1)
 
             if not end_date:
                 end_date = start_date + get_delta_from_period(period)
