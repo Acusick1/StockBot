@@ -2,8 +2,10 @@
 /shelf/
 /venv/
 /.idea
+/.cache
 /workspace.xml
-**/*.hdf5
-**/*.h5
-**/wip.py
+.env
+*.hdf5
+*.h5
+*wip.py
 poetry.lock

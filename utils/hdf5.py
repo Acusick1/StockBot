@@ -10,7 +10,7 @@ def keys_in_h5(file_path) -> list:
     return saved_keys
 
 
-def create_h5_key(*args: str) -> str:
+def get_h5_key(*args: str) -> str:
     """Create a valid multi-level h5 key from input strings"""
     return "/".join(["", *args])
 

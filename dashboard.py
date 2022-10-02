@@ -3,20 +3,15 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sbn
-from matplotlib import ticker
-from typing import Union, Dict, List, Tuple
-from src.settings import EXAMPLE_STOCKS, VALID_PERIODS, VALID_INTERVALS, TIME_MAPPINGS
-from src.data.get_data import DatabaseApi
-from src.data.apis import FinanceApi
+from datetime import datetime
+from typing import Dict
+from src.api.schemas import RequestBase, valid_intervals, valid_periods
+from src.api.get_data import DatabaseApi
+from src.api.apis import FinanceApi
 from utils.plotting import get_subplot_shape
+from config import EXAMPLE_STOCKS
 
 api = FinanceApi()
-
-
-# @st.cache
-def load_data(tickers: Union[List, Tuple], database: DatabaseApi):
-
-    return database.get_data(tickers)
 
 
 def plot_stock(data: Dict):
@@ -54,24 +49,27 @@ def main():
                    key="ticker_picker")
 
     st.select_slider("Period",
-                     options=VALID_PERIODS,
+                     options=valid_periods,
                      key="period_picker")
 
     st.select_slider("Interval",
-                     options=VALID_INTERVALS,
-                     value=VALID_INTERVALS[0],
+                     options=valid_intervals,
+                     value=valid_intervals[0],
                      key="interval_picker")
+
+    database = DatabaseApi(api=api)
 
     tickers = st.session_state.ticker_picker
     period = st.session_state.period_picker
     interval = st.session_state.interval_picker
 
-    valid_times = pd.unique([*VALID_INTERVALS, *VALID_PERIODS])
+    valid_times = pd.unique([*valid_intervals, *valid_periods])
 
     if np.where(valid_times == interval) < np.where(valid_times == period):
-        database = DatabaseApi(api=api, period=TIME_MAPPINGS[period], interval=TIME_MAPPINGS[interval])
+
         if tickers:
-            df = load_data(tickers, database=database)
+            request = RequestBase(stock=tickers, period=period, interval=interval, end_date=datetime.today())
+            df = database.get_data(request)
 
             if df is not None:
                 plot_stock(df)

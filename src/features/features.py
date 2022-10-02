@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Dict
-from src.data.get_data import get_example_data
 
 
 def add_analysis(data: pd.DataFrame):
@@ -45,8 +44,3 @@ def build(data: Dict[str, pd.DataFrame] = None):
         data[stock] = add_analysis(df)
 
     return data
-
-
-if __name__ == "__main__":
-
-    build(get_example_data())
