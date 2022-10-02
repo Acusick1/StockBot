@@ -34,7 +34,7 @@ class Interval(BaseModel):
         elif unit == "h":
             return Interval(key=interval, delta=timedelta(hours=num), ifreq=f"{num * 60}T")
         elif unit == "d":
-            return Interval(key=interval, delta=timedelta(days=1), dfreq=f"{num}B")
+            return Interval(key=interval, delta=timedelta(days=num), dfreq=f"{num}B")
         elif unit == "mo":
             return Interval(key=interval, delta=timedelta(days=30), dfreq=f"{num}M")
         elif unit == "y":
