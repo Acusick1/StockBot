@@ -66,12 +66,15 @@ class DatabaseApi:
                     interval_key=base_interval
                 )
 
-                for tick in request.stock:
-                    if response.shape[0]:
+                if isinstance(response, pd.DataFrame):
+                    for tick in request.stock:
+                        if response.shape[0]:
 
-                        data[tick] = response
-                        put_data = response.filter(items=diff[tick], axis=0)
-                        h5.append(key=get_h5_key(base_h5_key, key), value=put_data, format="table")
+                            data[tick] = response
+                            put_data = response.filter(items=diff[tick], axis=0)
+                            h5.append(key=get_h5_key(base_h5_key, tick), value=put_data, format="table")
+                else:
+                    pass
 
         data = {tick: v.filter(items=indices, axis=0).sort_index().dropna() for tick, v in data.items()}
 
