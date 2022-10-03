@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from pydantic import BaseModel, root_validator, validator
 from typing import List, Optional, Tuple, Union
-from src.api.gen import get_delta_from_period, get_period_from_delta, split_period
+from src.api.gen import get_base_period, get_delta_from_period, get_period_from_delta, split_period
+from utils.hdf5 import get_h5_key
 from config import settings
 
 
@@ -117,6 +118,17 @@ class RequestBase(BaseModel):
 
         values.update({"period": period, "start_date": start_date, "end_date": end_date})
         return values
+
+    def get_h5_keys(self):
+        """Get key format used in h5 files: base interval (minute, daily) with stock subgroup"""
+        # TODO: Match base interval to yahoo format? (minute > 1m, daily > 1d)
+        base_period = get_base_period(self.interval.key)
+        return [get_h5_key(base_period, stock) for stock in self.stock]
+
+    def get_base_interval(self):
+        """Get yahoo API interval format from base interval (1m or 1d)"""
+        base_period = get_base_period(self.interval.key)
+        return "1" + base_period[0]
 
 
 if __name__ == "__main__":

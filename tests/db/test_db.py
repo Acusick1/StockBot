@@ -16,6 +16,7 @@ def test_get_data(yfd, database_api, fake_year_request):
 @patch("yfinance.download")
 def test_similar_requests(yfd, database_api, fake_year_request, fake_month_request, mocker):
 
+    h5_key = fake_year_request.get_h5_keys()[0]
     data = create_fake_data(request=fake_year_request)
     yfd.return_value = data
 
@@ -33,7 +34,7 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
     assert yfd.call_count == 1
 
     with HDFStore(database_api.data_file, "r") as h5:
-        db_data = DataFrame(h5.get(f"/daily/{fake_month_request.stock[0]}"))
+        db_data = DataFrame(h5.get(h5_key))
         assert db_data.shape[0] == data.shape[0]
 
     # Create request that should result in new download and append call
@@ -49,5 +50,5 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
     assert yfd.call_count == 2
 
     with HDFStore(database_api.data_file, "r") as h5:
-        new_db_data = DataFrame(h5.get(f"/daily/{next_day_request.stock[0]}"))
+        new_db_data = DataFrame(h5.get(h5_key))
         assert new_db_data.shape[0] == new_data.shape[0]

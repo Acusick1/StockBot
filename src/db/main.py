@@ -3,9 +3,8 @@ import pandas as pd
 from typing import Optional
 from datetime import datetime, timedelta
 from src.api.main import FinanceApi
-from src.api.gen import get_base_period
 from src.db import schemas
-from utils.hdf5 import get_h5_key, h5_key_elements
+from utils.hdf5 import h5_key_elements
 from utils.gen import trading_day_range
 from config import settings
 
@@ -19,10 +18,6 @@ class DatabaseApi:
         self.api = api if api else FinanceApi()
 
     def get_data(self, request: schemas.RequestBase):
-
-        # TODO: Hack that needs refactored
-        base_h5_key = get_base_period(request.interval.key)
-        base_interval = "1" + base_h5_key[0]
 
         indices = trading_day_range(
             bday_start=request.start_date,
@@ -38,9 +33,7 @@ class DatabaseApi:
         # TODO: Lots of refactoring and abstraction
         with pd.HDFStore(self.data_file) as h5:
 
-            for tick in request.stock:
-
-                key = get_h5_key(base_h5_key, tick)
+            for tick, key in zip(request.stock, request.get_h5_keys()):
 
                 if key in h5.keys():
                     db_data[tick] = pd.DataFrame(
@@ -64,16 +57,16 @@ class DatabaseApi:
 
                 response = self.api.make_request(
                     request,
-                    interval_key=base_interval
+                    interval_key=request.get_base_interval()
                 )
 
                 if isinstance(response, pd.DataFrame):
-                    for tick in request.stock:
+                    for tick, key in zip(request.stock, request.get_h5_keys()):
                         if response.shape[0]:
 
                             data[tick] = response
                             put_data = response.filter(items=diff[tick], axis=0)
-                            h5.append(key=get_h5_key(base_h5_key, tick), value=put_data, format="table")
+                            h5.append(key=key, value=put_data, format="table")
                 else:
                     pass
 
