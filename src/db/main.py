@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
+import pandas_market_calendars as mcal
 from typing import Optional
 from datetime import datetime, timedelta
 from src.api.main import FinanceApi
 from src.db import schemas
 from utils.hdf5 import h5_key_elements
-from utils.gen import trading_day_range
 from config import settings
 
 
@@ -13,18 +13,14 @@ class DatabaseApi:
 
     data_file = settings.stock_history_file
 
-    def __init__(self, api: Optional[FinanceApi] = None):
+    def __init__(self, api: Optional[FinanceApi] = None, market: str = "NYSE"):
 
         self.api = api if api else FinanceApi()
+        self.calendar = mcal.get_calendar(market)
 
     def get_data(self, request: schemas.RequestBase):
 
-        indices = trading_day_range(
-            bday_start=request.start_date,
-            bday_end=request.end_date,
-            bday_freq=request.interval.dfreq,
-            iday_freq=request.interval.ifreq,
-        )
+        indices = get_indices(request=request, calendar=self.calendar)
 
         data = {}
         db_data = {}
@@ -35,21 +31,30 @@ class DatabaseApi:
 
             for tick, key in zip(request.stock, request.get_h5_keys()):
 
+                diff[tick] = indices
+
                 if key in h5.keys():
+
+                    # Search slightly outwith bounds to ensure time is not excluding results
+                    start_date = request.start_date - timedelta(days=1)
+                    end_date = request.end_date + timedelta(days=1)
                     db_data[tick] = pd.DataFrame(
-                        h5.select(key, where=["index>=request.start_date & index<=request.end_date"])
+                        h5.select(key, where=["index>=start_date & index<=end_date"])
                     )
 
-                    # TODO: Lots of missing ticks in raw data, need to do a more rough estimation than checking every
-                    #  tick, e.g. one tick for each date when daily base, two or more for minute base.
-                    diff[tick] = indices.difference(db_data[tick].index)
-                else:
-                    diff[tick] = indices
+                    # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
+                    # compare dates instead
+                    diff_dates = set(indices.date) - set(db_data[tick].index.date)
 
-                # All data present in database, no need to make request
-                if not diff[tick].shape[0]:
-                    data[tick] = db_data[tick]
-                    rm_stock.append(tick)
+                    if diff_dates:
+                        # Now take difference at lowest level (may still be dates only) to filter request data for
+                        # database insertion
+                        diff[tick] = indices.difference(db_data[tick].index)
+
+                    else:
+                        # All data present in database, no need to make request, can assign data directly
+                        data[tick] = db_data[tick]
+                        rm_stock.append(tick)
 
             if len(rm_stock) != len(request.stock):
 
@@ -64,6 +69,12 @@ class DatabaseApi:
                     for tick, key in zip(request.stock, request.get_h5_keys()):
                         if response.shape[0]:
 
+                            # TODO: This may have been a database error, commenting out until confirmed
+                            # For some reason the API can return duplicated rows and duplicated indices containing
+                            # different data. In the first case drop_duplicates will suffice, but for the second it has
+                            # to be decided which data should be kept
+                            # response = response[~response.index.duplicated(keep='first')]
+
                             data[tick] = response
                             put_data = response.filter(items=diff[tick], axis=0)
                             h5.append(key=key, value=put_data, format="table")
@@ -73,6 +84,20 @@ class DatabaseApi:
         data = {tick: v.filter(items=indices, axis=0).sort_index().dropna() for tick, v in data.items()}
 
         return data
+
+
+def get_indices(request: schemas.RequestBase, calendar):
+
+    base_interval = request.get_base_interval()
+
+    if base_interval == "1m":
+        schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=calendar.tz)
+        indices = mcal.date_range(schedule, frequency=base_interval.upper())
+    else:
+        schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=None)
+        indices = schedule.index
+
+    return indices
 
 
 def update_data_file(h5_file: pd.HDFStore, key: str, interval="1d"):
@@ -109,15 +134,12 @@ def clean_data():
             h5.put(key=key, value=df)
 
 
-def create_fake_data(request: schemas.RequestBase):
+def create_fake_data(request: schemas.RequestBase, market: str = "NYSE"):
 
-    index = trading_day_range(
-        bday_start=request.start_date,
-        bday_end=request.end_date,
-        iday_freq=request.interval.ifreq
-    )
+    calendar = mcal.get_calendar(market)
+    index = get_indices(request=request, calendar=calendar)
 
-    columns = ["Open", "Close", "Adj Close", "Volume"]
+    columns = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
     data = np.random.rand(index.shape[0], len(columns))
     return pd.DataFrame(data, columns=columns, index=index)
