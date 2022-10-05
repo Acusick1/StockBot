@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
+from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
 from src.api.main import FinanceApi
@@ -11,79 +12,96 @@ from config import settings
 
 class DatabaseApi:
 
-    data_file = settings.stock_history_file
-
-    def __init__(self, api: Optional[FinanceApi] = None, market: str = "NYSE"):
+    def __init__(self,
+                 api: Optional[FinanceApi] = None,
+                 market: str = "NYSE",
+                 store_path: Path = settings.stock_history_file):
 
         self.api = api if api else FinanceApi()
         self.calendar = mcal.get_calendar(market)
+        self.store = pd.HDFStore(str(store_path))
 
     def get_data(self, request: schemas.RequestBase):
 
         indices = get_indices(request=request, calendar=self.calendar)
 
         data = {}
-        db_data = {}
         diff = {}
         rm_stock = []
         # TODO: Lots of refactoring and abstraction
-        with pd.HDFStore(self.data_file) as h5:
 
-            for tick, key in zip(request.stock, request.get_h5_keys()):
+        for tick, key in zip(request.stock, request.get_h5_keys()):
 
-                diff[tick] = indices
+            diff[tick] = indices
 
-                if key in h5.keys():
+            if key in self.store.keys():
 
-                    # Search slightly outwith bounds to ensure time is not excluding results
-                    start_date = request.start_date - timedelta(days=1)
-                    end_date = request.end_date + timedelta(days=1)
-                    db_data[tick] = pd.DataFrame(
-                        h5.select(key, where=["index>=start_date & index<=end_date"])
-                    )
+                # Search slightly outwith bounds to ensure time is not excluding results
+                start_date = request.start_date - timedelta(days=1)
+                end_date = request.end_date + timedelta(days=1)
+                db_data = self.get_db_data(key, start_date=start_date, end_date=end_date)
 
-                    # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
-                    # compare dates instead
-                    diff_dates = set(indices.date) - set(db_data[tick].index.date)
+                # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
+                # compare dates instead
+                diff_dates = set(indices.date) - set(db_data.index.date)
 
-                    if diff_dates:
-                        # Now take difference at lowest level (may still be dates only) to filter request data for
-                        # database insertion
-                        diff[tick] = indices.difference(db_data[tick].index)
+                if diff_dates:
+                    # Now take difference at lowest level (may still be dates only) to filter request data for
+                    # database insertion
+                    diff[tick] = indices.difference(db_data.index)
 
-                    else:
-                        # All data present in database, no need to make request, can assign data directly
-                        data[tick] = db_data[tick]
-                        rm_stock.append(tick)
-
-            if len(rm_stock) != len(request.stock):
-
-                request.stock = list(set(request.stock) - set(rm_stock))
-
-                response = self.api.make_request(
-                    request,
-                    interval_key=request.get_base_interval()
-                )
-
-                if isinstance(response, pd.DataFrame):
-                    for tick, key in zip(request.stock, request.get_h5_keys()):
-                        if response.shape[0]:
-
-                            # TODO: This may have been a database error, commenting out until confirmed
-                            # For some reason the API can return duplicated rows and duplicated indices containing
-                            # different data. In the first case drop_duplicates will suffice, but for the second it has
-                            # to be decided which data should be kept
-                            # response = response[~response.index.duplicated(keep='first')]
-
-                            data[tick] = response
-                            put_data = response.filter(items=diff[tick], axis=0)
-                            h5.append(key=key, value=put_data, format="table")
                 else:
-                    pass
+                    # All data present in database, no need to make request, can assign data directly
+                    data[tick] = db_data
+                    rm_stock.append(tick)
+
+        if len(rm_stock) != len(request.stock):
+
+            request.stock = list(set(request.stock) - set(rm_stock))
+
+            response = self.api.make_request(
+                request,
+                interval_key=request.get_base_interval()
+            )
+
+            if isinstance(response, pd.DataFrame):
+                for tick, key in zip(request.stock, request.get_h5_keys()):
+                    if response.shape[0]:
+
+                        # TODO: This may have been a database error, commenting out until confirmed
+                        # For some reason the API can return duplicated rows and duplicated indices containing
+                        # different data. In the first case drop_duplicates will suffice, but for the second it has
+                        # to be decided which data should be kept
+                        # response = response[~response.index.duplicated(keep='first')]
+
+                        data[tick] = response
+                        put_data = response.filter(items=diff[tick], axis=0)
+                        self.store.append(key=key, value=put_data, format="table")
+            else:
+                pass
 
         data = {tick: v.filter(items=indices, axis=0).sort_index().dropna() for tick, v in data.items()}
 
         return data
+
+    def get_db_data(self, key, start_date=None, end_date=None) -> pd.DataFrame:
+        """
+        Filter store data by key and optional start/end dates
+        """
+
+        where = []
+        if start_date:
+            where.append("index>=start_date")
+        if end_date:
+            where.append("index<=end_date")
+
+        db_data = pd.DataFrame(self.store.select(key, where=where))
+
+        return db_data
+
+    def __del__(self):
+
+        self.store.close()
 
 
 def get_indices(request: schemas.RequestBase, calendar):
