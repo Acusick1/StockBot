@@ -52,6 +52,7 @@ class DatabaseApi:
 
                 else:
                     # All data present in database, no need to make request, can assign data directly
+                    diff[tick] = None
                     data[tick] = db_data
                     rm_stock.append(tick)
 

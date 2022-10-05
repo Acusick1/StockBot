@@ -93,19 +93,23 @@ class RequestBase(BaseModel):
 
         if period:
 
-            # Special case "max" = undefined start date
             if period == "max":
+                # Special case "max" = undefined start date
                 start_date = None
                 end_date = datetime.today()
 
-            # Special case year-to-date = start from beginning of year
-            if period == "ytd":
+            elif period == "ytd":
+                # Special case year-to-date = start from beginning of year
                 start_date = datetime.today().replace(month=1, day=1)
 
-            if not end_date:
-                end_date = start_date + get_delta_from_period(period)
             elif not start_date:
+                # If no end date provided, go with today
+                end_date = end_date if end_date else datetime.today()
                 start_date = end_date - get_delta_from_period(period)
+
+            elif not end_date:
+                end_date = start_date + get_delta_from_period(period)
+
         else:
             period = get_period_from_delta(end_date - start_date)
 
