@@ -5,21 +5,21 @@ from config import settings
 
 
 @pytest.fixture(scope="function")
-def test_file():
+def store_file():
 
-    test_data_file = settings.data_path / "test_data.h5"
-    test_data_file.unlink(missing_ok=True)
-    test_data_file.touch()
+    test_store_file = settings.data_path / "test_data.h5"
+    test_store_file.unlink(missing_ok=True)
+    test_store_file.touch()
 
-    yield test_data_file
-    test_data_file.unlink()
+    yield test_store_file
+    test_store_file.unlink()
 
 
 @pytest.fixture(scope="function")
-def database_api(test_file):
+def database_api(store_file):
 
-    db = DatabaseApi()
-    db.data_file = test_file
+    db = DatabaseApi(store_path=store_file)
+    db.data_file = store_file
     yield db
 
 

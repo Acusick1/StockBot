@@ -1,5 +1,6 @@
 from datetime import timedelta
-from pandas import DataFrame, HDFStore
+from pandas import DataFrame, HDFStore, testing
+from pandas.tseries.offsets import BDay
 from unittest.mock import patch
 from src.db.main import create_fake_data
 
@@ -11,8 +12,41 @@ def test_get_data(yfd, database_api, fake_year_request):
     assert yfd.call_count == 1
 
 
+def test_get_db_data(database_api, fake_year_request):
+
+    key = fake_year_request.get_h5_keys()[0]
+    put_data = create_fake_data(request=fake_year_request)
+    database_api.store.put(key, put_data, format="table")
+
+    # Pull all data, should be equal to put data
+    pull_data = database_api.get_db_data(key)
+    testing.assert_frame_equal(put_data, pull_data)
+
+    # Pull data with date filters, should again be equal to put data
+    pull_data = database_api.get_db_data(
+        key,
+        start_date=fake_year_request.start_date,
+        end_date=fake_year_request.end_date
+    )
+
+    testing.assert_frame_equal(put_data, pull_data)
+
+    business_day_delta = BDay(5)
+    start_date_delta = fake_year_request.start_date + business_day_delta
+    end_date_delta = fake_year_request.end_date - business_day_delta
+
+    pull_data = database_api.get_db_data(key, start_date=start_date_delta)
+    assert pull_data.index[0].date() == start_date_delta.date()
+
+    pull_data = database_api.get_db_data(key, end_date=end_date_delta)
+    assert pull_data.index[-1].date() == end_date_delta.date()
+
+    pull_data = database_api.get_db_data(key, start_date=start_date_delta, end_date=end_date_delta)
+    assert pull_data.index[0].date() == start_date_delta.date()
+    assert pull_data.index[-1].date() == end_date_delta.date()
+
+
 # TODO: Split into two tests
-# TODO: Unified way of getting h5 key from interval (or key from request)
 @patch("yfinance.download")
 def test_similar_requests(yfd, database_api, fake_year_request, fake_month_request, mocker):
 
@@ -33,9 +67,8 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
     assert h5_append.call_count == 1
     assert yfd.call_count == 1
 
-    with HDFStore(database_api.data_file, "r") as h5:
-        db_data = DataFrame(h5.get(h5_key))
-        assert db_data.shape[0] == data.shape[0]
+    db_data = DataFrame(database_api.store.get(h5_key))
+    assert db_data.shape[0] == data.shape[0]
 
     # Create request that should result in new download and append call
     next_day_request = fake_year_request.copy()
@@ -49,6 +82,5 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
     assert h5_append.call_count == 2
     assert yfd.call_count == 2
 
-    with HDFStore(database_api.data_file, "r") as h5:
-        new_db_data = DataFrame(h5.get(h5_key))
-        assert new_db_data.shape[0] == new_data.shape[0]
+    new_db_data = DataFrame(database_api.store.get(h5_key))
+    assert new_db_data.shape[0] == new_data.shape[0]
