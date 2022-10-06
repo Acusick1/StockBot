@@ -24,4 +24,4 @@ class YahooApiSettings(BaseSettings):
 settings = Settings()
 yahoo_api_settings = YahooApiSettings()
 
-EXAMPLE_STOCKS = ['AAPL', 'F', 'MSFT', 'AMD']
+EXAMPLE_STOCKS = ['AAPL', 'F', 'MSFT', 'AMD', 'GOOG', 'AMZN', 'META']

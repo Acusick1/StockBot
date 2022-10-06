@@ -4,7 +4,6 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sbn
 from datetime import datetime
-from typing import Dict
 from src.api.main import FinanceApi
 from src.db.schemas import RequestBase, valid_intervals, valid_periods
 from src.db.main import DatabaseApi
@@ -14,13 +13,13 @@ from config import EXAMPLE_STOCKS
 api = FinanceApi()
 
 
-def plot_stock(data: Dict):
+def plot_stock(data: pd.DataFrame):
 
     def format_date(x, pos=None):
         thisind = np.clip(int(x + 0.5), 0, nums - 1)
         return df.index[thisind].strftime('%Y-%m-%d %H:%M')
 
-    subplot_shape = get_subplot_shape(len(data.keys()))
+    subplot_shape = get_subplot_shape(len(data.columns.unique(0)))
 
     fig, ax = plt.subplots(*subplot_shape)
     if any(subplot_shape > 1):
@@ -30,8 +29,9 @@ def plot_stock(data: Dict):
         ax = [ax]
 
     i = 0
-    for stock, df in data.items():
+    for stock, df in data.groupby(level=0, axis=1):
 
+        df = df.droplevel(0, axis=1)
         nums = np.arange(df.shape[0])
         plt.sca(ax[i])
         ax[i].set_title(stock)
