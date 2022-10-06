@@ -5,9 +5,13 @@ from src.api.gen import get_base_period, get_delta_from_period, get_period_from_
 from utils.hdf5 import get_h5_key
 from config import settings
 
+# All options
+# valid_intervals = ("1m", "2m", "5m", "15m", "30m", "1h", "1d", "5d", "1mo", "3mo")
+# valid_periods = ("1d", "5d", "1mo", "3mo", "6mo", "1y", "ytd", "2y", "5y", "10y", "max")
 
-valid_intervals = ("1m", "2m", "5m", "15m", "30m", "1h", "1d", "5d", "1mo", "3mo")
-valid_periods = ("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max")
+# Limited and more usable options
+valid_intervals = ("1m", "2m", "5m", "15m", "30m", "1d", "5d")
+valid_periods = ("1d", "5d", "1mo", "3mo", "6mo", "1y", "ytd", "2y", "5y", "10y")
 
 
 class Interval(BaseModel):
@@ -101,6 +105,7 @@ class RequestBase(BaseModel):
             elif period == "ytd":
                 # Special case year-to-date = start from beginning of year
                 start_date = datetime.today().replace(month=1, day=1)
+                end_date = datetime.today()
 
             elif not start_date:
                 # If no end date provided, go with today
@@ -113,12 +118,15 @@ class RequestBase(BaseModel):
         else:
             period = get_period_from_delta(end_date - start_date)
 
-        if start_date > end_date:
-            raise ValueError("Start date is greater than end date!")
+        # Start date undefined when period is max
+        if period != "max":
 
-        elif end_date < start_date + interval.delta:
-            raise ValueError("End date is less than start date + one interval: \n"
-                             f"{end_date} < {start_date} + {interval.delta}")
+            if start_date > end_date:
+                raise ValueError("Start date is greater than end date!")
+
+            elif end_date < start_date + interval.delta:
+                raise ValueError("End date is less than start date + one interval: \n"
+                                 f"{end_date} < {start_date} + {interval.delta}")
 
         values.update({"period": period, "start_date": start_date, "end_date": end_date})
         return values
@@ -133,6 +141,11 @@ class RequestBase(BaseModel):
         """Get yahoo API interval format from base interval (1m or 1d)"""
         base_period = get_base_period(self.interval.key)
         return "1" + base_period[0]
+
+    def get_h5_key(self, stock: str):
+
+        base_period = get_base_period(self.interval.key)
+        return get_h5_key(base_period, stock)
 
 
 if __name__ == "__main__":

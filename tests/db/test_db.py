@@ -8,6 +8,9 @@ from src.db.main import create_fake_data
 @patch("yfinance.download")
 def test_get_data(yfd, database_api, fake_year_request):
 
+    data = create_fake_data(request=fake_year_request)
+    yfd.return_value = data
+
     database_api.get_data(request=fake_year_request)
     assert yfd.call_count == 1
 

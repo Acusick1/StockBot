@@ -23,72 +23,77 @@ class DatabaseApi:
 
     def get_data(self, request: schemas.RequestBase):
 
-        indices = get_indices(request=request, calendar=self.calendar)
+        # Taking a copy since we may make changes to stocks
+        request = request.copy()
+
+        indices = get_indices(request, calendar=self.calendar)
+        base_indices = get_indices(request=request, calendar=self.calendar, frequency=request.get_base_interval())
+
+        # Search slightly outwith bounds to ensure time is not excluding results
+        start_date = request.start_date - timedelta(days=1)
+        end_date = request.end_date + timedelta(days=1)
 
         data = {}
         diff = {}
-        rm_stock = []
-        # TODO: Lots of refactoring and abstraction
+        for tick in request.stock:
 
-        for tick, key in zip(request.stock, request.get_h5_keys()):
+            key = request.get_h5_key(tick)
+            db_data = self.get_db_data(key, start_date=start_date, end_date=end_date)
 
-            diff[tick] = indices
+            if db_data is None or not db_data.shape[0]:
+                diff[tick] = base_indices
+                continue
 
-            if key in self.store.keys():
+            # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
+            # compare dates instead
+            diff_dates = set(base_indices.date) - set(db_data.index.date)
 
-                # Search slightly outwith bounds to ensure time is not excluding results
-                start_date = request.start_date - timedelta(days=1)
-                end_date = request.end_date + timedelta(days=1)
-                db_data = self.get_db_data(key, start_date=start_date, end_date=end_date)
+            if diff_dates:
+                # Now take difference at lowest level (may still be dates only) to filter request data for
+                # database insertion
+                diff[tick] = base_indices.difference(db_data.index)
 
-                # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
-                # compare dates instead
-                diff_dates = set(indices.date) - set(db_data.index.date)
+            else:
+                # All data present in database, no need to make request, can assign data directly
+                data[tick] = db_data
 
-                if diff_dates:
-                    # Now take difference at lowest level (may still be dates only) to filter request data for
-                    # database insertion
-                    diff[tick] = indices.difference(db_data.index)
+        mi = pd.concat(data, axis=1) if data else None
+        request.stock = list(set(request.stock) - set(data.keys()))
 
-                else:
-                    # All data present in database, no need to make request, can assign data directly
-                    diff[tick] = None
-                    data[tick] = db_data
-                    rm_stock.append(tick)
-
-        if len(rm_stock) != len(request.stock):
-
-            request.stock = list(set(request.stock) - set(rm_stock))
+        if request.stock:
 
             response = self.api.make_request(
                 request,
                 interval_key=request.get_base_interval()
             )
 
-            if isinstance(response, pd.DataFrame):
-                for tick, key in zip(request.stock, request.get_h5_keys()):
-                    if response.shape[0]:
+            if response.shape[0]:
 
-                        # TODO: This may have been a database error, commenting out until confirmed
-                        # For some reason the API can return duplicated rows and duplicated indices containing
-                        # different data. In the first case drop_duplicates will suffice, but for the second it has
-                        # to be decided which data should be kept
-                        # response = response[~response.index.duplicated(keep='first')]
+                # Make multi-index
+                if response.columns.nlevels == 1:
+                    response = pd.concat({request.stock[0]: response}, axis=1)
 
-                        data[tick] = response
-                        put_data = response.filter(items=diff[tick], axis=0)
-                        self.store.append(key=key, value=put_data, format="table")
-            else:
-                pass
+                for tick, df in response.groupby(level=0, axis=1):
 
-        data = {tick: v.filter(items=indices, axis=0).sort_index().dropna() for tick, v in data.items()}
+                    tick = str(tick)
+                    df = df.droplevel(0, axis=1)
+                    df = df.filter(items=diff[tick], axis=0)
+                    self.store.append(key=request.get_h5_key(tick), value=df, format="table")
 
-        return data
+                mi = pd.concat([mi, response], axis=1)
 
-    def get_db_data(self, key, start_date=None, end_date=None) -> pd.DataFrame:
+        if mi is not None:
+            mi = mi.filter(items=indices, axis=0).sort_index()
+
+        return mi
+
+    def get_db_data(self, key, start_date=None, end_date=None) -> Optional[pd.DataFrame]:
         """
         Filter store data by key and optional start/end dates
         """
+
+        if key not in self.store.keys():
+            return None
 
         where = []
         if start_date:
@@ -105,13 +110,14 @@ class DatabaseApi:
         self.store.close()
 
 
-def get_indices(request: schemas.RequestBase, calendar):
+def get_indices(request: schemas.RequestBase, calendar, frequency: Optional[str] = None):
 
-    base_interval = request.get_base_interval()
+    if frequency is None:
+        frequency = request.interval.key
 
-    if base_interval == "1m":
+    if frequency.endswith("m"):
         schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=calendar.tz)
-        indices = mcal.date_range(schedule, frequency=base_interval.upper())
+        indices = mcal.date_range(schedule, frequency=frequency)
     else:
         schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=None)
         indices = schedule.index
