@@ -5,7 +5,8 @@
 /.cache
 /workspace.xml
 .env
-*.hdf5
 *.h5
+*.hdf5
+*.html
 *wip.py
 poetry.lock
