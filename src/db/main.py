@@ -101,7 +101,7 @@ class DatabaseApi:
         if end_date:
             where.append("index<=end_date")
 
-        db_data = pd.DataFrame(self.store.select(key, where=where))
+        db_data = pd.DataFrame(self.store.select(key, where=where)).sort_index()
 
         return db_data
 
