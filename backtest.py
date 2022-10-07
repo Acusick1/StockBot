@@ -13,9 +13,17 @@ if __name__ == "__main__":
     api = DatabaseApi()
     data = api.get_data(request=request)
 
-    for _, d in data.groupby(level=0, axis=1):
-        d = d.droplevel(0, axis=1)
-        bt = Backtest(d, SmaCross, cash=10_000, commission=.002)
-        stats = bt.run()
+    for _, df in data.groupby(level=0, axis=1):
+
+        df = df.droplevel(0, axis=1)
+        bt = Backtest(df, SmaCross, cash=10_000, commission=.002)
+
+        # stats = bt.run()
+        stats = bt.optimize(
+            sma1=[5, 10, 15],
+            sma2=[10, 20, 40],
+            constraint=lambda p: p.sma1 < p.sma2
+        )
+
         print(stats)
         bt.plot()
