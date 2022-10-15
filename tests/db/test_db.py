@@ -1,5 +1,6 @@
+import numpy as np
 from datetime import timedelta
-from pandas import DataFrame, HDFStore, testing
+from pandas import DataFrame, testing
 from pandas.tseries.offsets import BDay
 from unittest.mock import patch
 from src.db.main import create_fake_data
@@ -87,3 +88,41 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
 
     new_db_data = DataFrame(database_api.store.get(h5_key))
     assert new_db_data.shape[0] == new_data.shape[0]
+
+
+@patch("yfinance.download")
+def test_missing_rows(yfd, database_api, fake_month_request):
+
+    h5_key = fake_month_request.get_h5_keys()[0]
+    data = create_fake_data(request=fake_month_request)
+    
+    missing_rows_data = data.drop(index=data.index[-5:])
+    yfd.return_value = missing_rows_data
+
+    database_api.get_data(request=fake_month_request)
+
+    db_data = DataFrame(database_api.store.get(h5_key))
+    assert db_data.shape[0] == data.shape[0]
+
+    # New request should not make new api call
+    database_api.get_data(request=fake_month_request)
+    assert yfd.call_count == 1
+
+
+@patch("yfinance.download")
+def test_nan_overwrite(yfd, database_api, fake_month_request):
+    
+    data = create_fake_data(request=fake_month_request)
+    
+    missing_rows_data = data.drop(index=data.index[-5:])
+    yfd.return_value = missing_rows_data
+
+    # Make request to store missing rows data
+    database_api.get_data(request=fake_month_request)
+
+    # Now return full data and make request with NaN flag
+    yfd.return_value = data
+    request_data = database_api.get_data(request=fake_month_request, request_nan=True)
+
+    assert yfd.call_count == 2
+    assert ~request_data.isna().values.any()

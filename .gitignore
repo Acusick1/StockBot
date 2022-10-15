@@ -1,8 +1,9 @@
-# Default ignored files
+__pycache__
 /shelf/
 /venv/
 /.idea
 /.cache
+/.vscode
 /workspace.xml
 .env
 *.h5

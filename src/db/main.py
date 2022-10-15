@@ -21,12 +21,21 @@ class DatabaseApi:
         self.calendar = mcal.get_calendar(market)
         self.store = pd.HDFStore(str(store_path))
 
-    def get_data(self, request: schemas.RequestBase):
+    def get_data(self, request: schemas.RequestBase, request_nan: bool = False):
+        """
+        Get data from an input request. Will first query internal database, if data is missing it will make an API call.
+        
+        Parameters
+        ----------
+        request: Request schema containing all necessary information to query database/finance api.
+        request_nan: Whether or not to drop NaNs from data returned from database query, this guarantees an API request will be made if
+            any value is NaN. The API data has many missing values, so this should only be used for infrequent or scheduled maintainence 
+            calls.
+        """
 
         # Taking a copy since we may make changes to stocks
         request = request.copy()
 
-        indices = get_indices(request, calendar=self.calendar)
         base_indices = get_indices(request=request, calendar=self.calendar, frequency=request.get_base_interval())
 
         # Search slightly outwith bounds to ensure time is not excluding results
@@ -44,6 +53,10 @@ class DatabaseApi:
                 diff[tick] = base_indices
                 continue
 
+            # Drop NaNs before checking for differences
+            if request_nan:
+                db_data = db_data.dropna()
+
             # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
             # compare dates instead
             diff_dates = set(base_indices.date) - set(db_data.index.date)
@@ -51,8 +64,7 @@ class DatabaseApi:
             if diff_dates:
                 # Now take difference at lowest level (may still be dates only) to filter request data for
                 # database insertion
-                diff[tick] = base_indices.difference(db_data.index)
-
+                diff[tick] = base_indices.difference(db_data.index)            
             else:
                 # All data present in database, no need to make request, can assign data directly
                 data[tick] = db_data
@@ -66,6 +78,10 @@ class DatabaseApi:
                 request,
                 interval_key=request.get_base_interval()
             )
+            
+            # Ensure all rows are present. 
+            # Data returned may not be complete, and we do not want to make repeated requests because data is missing.
+            response = response.reindex(base_indices)
 
             if response.shape[0]:
 
@@ -83,7 +99,7 @@ class DatabaseApi:
                 mi = pd.concat([mi, response], axis=1)
 
         if mi is not None:
-            mi = mi.filter(items=indices, axis=0).sort_index()
+            mi = mi.filter(items=base_indices, axis=0).sort_index()
 
         return mi
 
