@@ -136,7 +136,7 @@ def get_indices(request: schemas.RequestBase, calendar, frequency: Optional[str]
         indices = mcal.date_range(schedule, frequency=frequency)
     else:
         schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=None)
-        indices = schedule.index
+        indices = schedule.index.tz_localize(calendar.tz)
 
     return indices
 
