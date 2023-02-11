@@ -18,8 +18,20 @@ class DatabaseApi:
                  store_path: Path = settings.stock_history_file):
 
         self.api = api if api else FinanceApi()
+        self.market = market
         self.calendar = mcal.get_calendar(market)
         self.store = pd.HDFStore(str(store_path))
+
+    def request(self, stock: list[str], interval="1d", period="1y", start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, *args, **kwargs):
+        """
+        Wrapper around request creation and get_data to avoid making request pre-api call.
+
+        See RequestBase in schemas in for parameter definitions. 
+        Args and kwargs pass onto get_data.
+        """
+
+        req = schemas.RequestBase(stock=stock, interval=interval, period=period, start_date=start_date, end_date=end_date)
+        return self.get_data(req, *args, **kwargs)
 
     def get_data(self, request: schemas.RequestBase, request_nan: bool = False):
         """
@@ -28,9 +40,9 @@ class DatabaseApi:
         Parameters
         ----------
         request: Request schema containing all necessary information to query database/finance api.
-        request_nan: Whether or not to drop NaNs from data returned from database query, this guarantees an API request will be made if
-            any value is NaN. The API data has many missing values, so this should only be used for infrequent or scheduled maintainence 
-            calls.
+        request_nan: Whether to drop NaNs from data returned from database query, this guarantees an API request will be
+            made if any value is NaN. The API data has many missing values, so this should only be used for infrequent
+            or scheduled maintenance calls.
         """
 
         # Taking a copy since we may make changes to stocks
