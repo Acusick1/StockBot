@@ -51,7 +51,7 @@ class Interval(BaseModel):
 class RequestBase(BaseModel):
 
     stock: Union[List[str], Tuple[str]]
-    interval: Interval
+    interval: Optional[Interval] = Interval.from_string("1d")
     period: Optional[str]
     start_date: Optional[datetime]
     end_date: Optional[datetime]

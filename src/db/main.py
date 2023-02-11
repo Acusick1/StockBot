@@ -118,6 +118,7 @@ class DatabaseApi:
     def get_db_data(self, key, start_date=None, end_date=None) -> Optional[pd.DataFrame]:
         """
         Filter store data by key and optional start/end dates
+        NOTE: Currently assumes full days only, inclusive of start/end dates
         """
 
         if key not in self.store.keys():
@@ -127,6 +128,9 @@ class DatabaseApi:
         if start_date:
             where.append("index>=start_date")
         if end_date:
+            # Make datetime midnight (i.e. 00:00 on following day)
+            end_date += timedelta(1)
+            end_date = end_date.replace(hour=0, minute=0)
             where.append("index<=end_date")
 
         db_data = pd.DataFrame(self.store.select(key, where=where)).sort_index()

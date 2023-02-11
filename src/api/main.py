@@ -71,8 +71,8 @@ class FinanceApi:
 
         output = yf.download(
             tickers=tickers,
-            start=start_date,
-            end=end_date,
+            # start=start_date,
+            # end=end_date,
             period=period,
             interval=interval_key,
             **params

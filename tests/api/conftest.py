@@ -36,10 +36,10 @@ def yahoo_request():
 @pytest.fixture(scope="session")
 def single_request():
 
-    yield schemas.RequestBase(stock="AAPL", interval="1d", end_date=last_bday, period="10d")
+    yield schemas.RequestBase(stock="AAPL", period="1y")
 
 
 @pytest.fixture(scope="session")
 def multi_request():
 
-    return schemas.RequestBase(stock=("AAPL", "MSFT"), interval="1d", end_date=last_bday, period="10d")
+    return schemas.RequestBase(stock=("AAPL", "MSFT"), period="1y")
