@@ -9,13 +9,14 @@ def validate_strict_args(inp: Any, options: Union[List, Tuple], name: str, optio
         raise ValueError(f"Inputs {name}: {inp} must be one of: {options}")
 
 
-def pct_change(data: np.array):
+def pct_change(data: list[float]):
     if len(data) == 1:
         out = 0
     else:
-        out = (data[1:] - data[:-1]) / data[:-1]
+        data = np.array(data)
+        out = 100 * (data[1:] - data[:-1]) / data[:-1]
 
-    return out
+    return out.squeeze()
 
 
 def dataframe_from_dict(d: dict) -> pd.DataFrame:

@@ -8,7 +8,7 @@ if __name__ == "__main__":
 
     stocks = ["AAPL", "F", "AMD", "NVDA", "MSFT"]
 
-    request = schemas.RequestBase(stock=stocks, end_date="2022-10-01", interval="1d", period="1y")
+    request = schemas.RequestBase(stock=stocks, end_date="2022-10-01", interval="1d", period="1y", flat=False)
 
     api = DatabaseApi()
     data = api.get_data(request=request)

@@ -22,21 +22,27 @@ class DatabaseApi:
         self.calendar = mcal.get_calendar(market)
         self.store = pd.HDFStore(str(store_path))
 
-    def request(self, stock: list[str], interval="1d", period="1y", start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, *args, **kwargs):
+    def request(self, stock: list[str], interval="1d", period="1y", start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, flat: bool = True, *args, **kwargs):
         """
         Wrapper around request creation and get_data to avoid making request pre-api call.
 
-        See RequestBase in schemas in for parameter definitions. 
+        See RequestBase in schemas in for parameter definitions.
         Args and kwargs pass onto get_data.
         """
 
-        req = schemas.RequestBase(stock=stock, interval=interval, period=period, start_date=start_date, end_date=end_date)
-        return self.get_data(req, *args, **kwargs)
+        req = schemas.RequestBase(stock=stock, interval=interval,
+                                  period=period, start_date=start_date, end_date=end_date)
+        data = self.get_data(req, *args, **kwargs)
+
+        if len(stock) == 1 and flat:
+            data = data.droplevel(0, axis=1)
+
+        return data
 
     def get_data(self, request: schemas.RequestBase, request_nan: bool = False):
         """
         Get data from an input request. Will first query internal database, if data is missing it will make an API call.
-        
+
         Parameters
         ----------
         request: Request schema containing all necessary information to query database/finance api.
@@ -48,7 +54,8 @@ class DatabaseApi:
         # Taking a copy since we may make changes to stocks
         request = request.copy()
 
-        base_indices = get_indices(request=request, calendar=self.calendar, frequency=request.get_base_interval())
+        base_indices = get_indices(
+            request=request, calendar=self.calendar, frequency=request.get_base_interval())
 
         # Search slightly outwith bounds to ensure time is not excluding results
         start_date = request.start_date - timedelta(days=1)
@@ -59,7 +66,8 @@ class DatabaseApi:
         for tick in request.stock:
 
             key = request.get_h5_key(tick)
-            db_data = self.get_db_data(key, start_date=start_date, end_date=end_date)
+            db_data = self.get_db_data(
+                key, start_date=start_date, end_date=end_date)
 
             if db_data is None or not db_data.shape[0]:
                 diff[tick] = base_indices
@@ -76,7 +84,7 @@ class DatabaseApi:
             if diff_dates:
                 # Now take difference at lowest level (may still be dates only) to filter request data for
                 # database insertion
-                diff[tick] = base_indices.difference(db_data.index)            
+                diff[tick] = base_indices.difference(db_data.index)
             else:
                 # All data present in database, no need to make request, can assign data directly
                 data[tick] = db_data
@@ -90,8 +98,8 @@ class DatabaseApi:
                 request,
                 interval_key=request.get_base_interval()
             )
-            
-            # Ensure all rows are present. 
+
+            # Ensure all rows are present.
             # Data returned may not be complete, and we do not want to make repeated requests because data is missing.
             response = response.reindex(base_indices)
 
@@ -106,7 +114,8 @@ class DatabaseApi:
                     tick = str(tick)
                     df = df.droplevel(0, axis=1)
                     df = df.filter(items=diff[tick], axis=0)
-                    self.store.append(key=request.get_h5_key(tick), value=df, format="table")
+                    self.store.append(key=request.get_h5_key(
+                        tick), value=df, format="table")
 
                 mi = pd.concat([mi, response], axis=1)
 
@@ -133,7 +142,8 @@ class DatabaseApi:
             end_date = end_date.replace(hour=0, minute=0)
             where.append("index<=end_date")
 
-        db_data = pd.DataFrame(self.store.select(key, where=where)).sort_index()
+        db_data = pd.DataFrame(self.store.select(
+            key, where=where)).sort_index()
 
         return db_data
 
@@ -148,10 +158,12 @@ def get_indices(request: schemas.RequestBase, calendar, frequency: Optional[str]
         frequency = request.interval.key
 
     if frequency.endswith("m"):
-        schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=calendar.tz)
+        schedule = calendar.schedule(
+            start_date=request.start_date, end_date=request.end_date, tz=calendar.tz)
         indices = mcal.date_range(schedule, frequency=frequency)
     else:
-        schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=None)
+        schedule = calendar.schedule(
+            start_date=request.start_date, end_date=request.end_date, tz=None)
         indices = schedule.index.tz_localize(calendar.tz)
 
     return indices
@@ -173,7 +185,8 @@ def update_data_file(h5_file: pd.HDFStore, key: str, interval="1d"):
     # and at least one day as API does not provide live data.
     if (now - start).total_seconds() > max(data_interval, timedelta(days=1).total_seconds()):
         download_key = h5_key_elements(key, index=-1)
-        request = schemas.RequestBase(stock=download_key, start_date=start, end_date=now, interval=interval)
+        request = schemas.RequestBase(
+            stock=download_key, start_date=start, end_date=now, interval=interval)
         api.get_data(request=request)
 
 
