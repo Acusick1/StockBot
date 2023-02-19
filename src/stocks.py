@@ -12,7 +12,8 @@ class Trade(BaseModel):
     ticker: str
     open_stamp: Optional[datetime]
     close_stamp: Optional[datetime]
-    price: float
+    open_price: float
+    close_price: Optional[float]
     quantity: Optional[int]
     value: Optional[float]
     type: str
@@ -21,10 +22,10 @@ class Trade(BaseModel):
     def class_validator(cls, values):
 
         if "value" in values:
-            values["quantity"] = values["value"] / values["price"]
+            values["quantity"] = values["value"] / values["buy_price"]
         
         elif "quantity" in values:
-            values["value"] = values["price"] * values["quantity"]
+            values["value"] = values["buy_price"] * values["quantity"]
 
         else:
             raise ValueError("Either value or quantity must be specified")
@@ -54,15 +55,15 @@ def evaluate_trade(trade: Trade):
     else:
         raise NotImplementedError()
 
-    change = pct_change([trade.price, latest_price])
+    change = pct_change([trade.open_price, latest_price])
 
     stops = {
         key: loss.calculate(
-            data, bought_on=trade.open_stamp.date()).iloc[-1].round(3)
+            data, bought_on=trade.open_stamp).iloc[-1].round(3)
         for key, loss in stop_losses.items()
     }
 
-    print(f"Bought: {trade.open_stamp.date()} | {trade.price}")
+    print(f"Bought: {trade.open_stamp.date()} | {trade.open_price}")
     print(f"Latest: {latest_date.date()} | {latest_price.round(3)}")
     print(f"Change: {change.round(3)}%")
     print(f"Stops:", json.dumps(stops, indent=4))
@@ -73,5 +74,5 @@ if __name__ == "__main__":
     from utils.market import get_market_tz
     d = get_market_tz().localize(datetime(2023, 2, 6))
 
-    trade = Trade(ticker="AMZN", open_stamp=d, price=102., value=200., type="buy")
+    trade = Trade(ticker="AMZN", open_stamp=d, open_price=102., value=200., type="buy")
     evaluate_trade(trade)
