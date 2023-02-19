@@ -1,43 +1,45 @@
 import json
 from datetime import datetime
+from pydantic import BaseModel, root_validator, validator
+from typing import Any, Optional
 from src.db.main import DatabaseApi
 from src.stoploss import stop_losses
 from utils.gen import pct_change
 
 
-class Transaction:
+class Trade(BaseModel):
+    
+    ticker: str
+    open_stamp: Optional[datetime]
+    close_stamp: Optional[datetime]
+    price: float
+    quantity: Optional[int]
+    value: Optional[float]
+    type: str
 
-    def __init__(self, date: datetime, value: float, stake: int):
-        self.date = date
-        self.value = value
-        self.stake = stake
+    @root_validator()
+    def class_validator(cls, values):
 
+        if "value" in values:
+            values["quantity"] = values["value"] / values["price"]
+        
+        elif "quantity" in values:
+            values["value"] = values["price"] * values["quantity"]
 
-class Trade:
+        else:
+            raise ValueError("Either value or quantity must be specified")
 
-    opened: bool = False
-    bought: Transaction = None
-    sold: Transaction = None
-    last_updated: tuple[datetime, float] = None
-    change: float = None
+        return values
 
-    def __init__(self, ticker: str, **kwargs) -> None:
-        # TODO: Validate ticker and price?
-        self.ticker = ticker
-        self.buy(**kwargs)
+    @validator("type")
+    def type_validator(cls, trade_type):
+        
+        trade_type = trade_type.lower()
 
-    def buy(self, date: datetime, value: float, stake: float):
-        self.opened = True
-        self.bought = Transaction(date=date, value=value, stake=stake)
+        if trade_type != "buy" and trade_type != "sell":
+            raise ValueError("Trade type must be either 'buy' or 'sell'")
 
-    def sell(self, date, value, stake):
-        self.opened = False
-        self.sold = Transaction(date=date, value=value, stake=stake)
-        self.last_updated = tuple([date, value])
-
-    def get_change(self):
-        if self.last_updated is not None:
-            self.change = pct_change([self.bought.value, self.last_updated[1]])
+        return trade_type
 
 
 def evaluate_trade(trade: Trade):
@@ -45,21 +47,24 @@ def evaluate_trade(trade: Trade):
     db = DatabaseApi()
 
     # TODO: Better way of defining how much to look back
-    if trade.opened:
+    if trade.open_stamp is not None:
         data = db.request([trade.ticker], period="1y")
-        trade.last_updated = tuple([data.index[-1], data["Close"].iloc[-1]])
+        latest_price = data["Close"].iloc[-1]
+        latest_date = data.index[-1]
+    else:
+        raise NotImplementedError()
 
-    trade.get_change()
+    change = pct_change([trade.price, latest_price])
 
     stops = {
         key: loss.calculate(
-            data, bought_on=trade.bought.date).iloc[-1].round(3)
+            data, bought_on=trade.open_stamp.date()).iloc[-1].round(3)
         for key, loss in stop_losses.items()
     }
 
-    print(f"Bought: {trade.bought.date.date()} | {trade.bought.value}")
-    print(f"Latest: {trade.last_updated[0].date()} | {trade.last_updated[1].round(3)}")
-    print(f"Change: {trade.change.round(3)}%")
+    print(f"Bought: {trade.open_stamp.date()} | {trade.price}")
+    print(f"Latest: {latest_date.date()} | {latest_price.round(3)}")
+    print(f"Change: {change.round(3)}%")
     print(f"Stops:", json.dumps(stops, indent=4))
 
 
@@ -68,5 +73,5 @@ if __name__ == "__main__":
     from utils.market import get_market_tz
     d = get_market_tz().localize(datetime(2023, 2, 6))
 
-    trade = Trade("AMZN", date=d, value=102., stake=200.)
+    trade = Trade(ticker="AMZN", open_stamp=d, price=102., value=200., type="buy")
     evaluate_trade(trade)
