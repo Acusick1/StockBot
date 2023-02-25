@@ -114,7 +114,13 @@ class DatabaseApi:
                     tick = str(tick)
                     df = df.droplevel(0, axis=1)
                     df = df.filter(items=diff[tick], axis=0)
-                    self.store.append(key=request.get_h5_key(
+                    
+                    # Joining, keeping fresh data, and sorting
+                    # Reading, merging and overwriting stored data here may take a while, but appending can be error prone.
+                    #   At least this way the duplicates and sorting is done immediately.
+                    df = pd.concat([self.store.get(key), df]).drop_duplicates(keep="last").sort_index()
+
+                    self.store.put(key=request.get_h5_key(
                         tick), value=df, format="table")
 
                 mi = pd.concat([mi, response], axis=1)
@@ -201,7 +207,7 @@ def clean_data():
             df = pd.DataFrame(h5.get(key))
             df = df.drop_duplicates().sort_index()
 
-            h5.put(key=key, value=df)
+            h5.put(key=key, value=df, format="table")
 
 
 def create_fake_data(request: schemas.RequestBase, market: str = "NYSE"):
