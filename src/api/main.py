@@ -38,6 +38,11 @@ class FinanceApi:
 
         self.default_params = params
 
+    def request(self, stock: list[str], **kwargs):
+
+        req = schemas.RequestBase(stock=stock, **kwargs)
+        return self.make_request(req)
+
     def make_request(
             self,
             request: schemas.RequestBase,
@@ -55,6 +60,10 @@ class FinanceApi:
         # Take copy of default arguments, and update with key word arguments if passed
         params = self.default_params.copy()
         params.update(kwargs)
+
+        if len(request.stock) > yahoo_api_settings.max_stocks_per_request:
+            
+            raise ValueError(f"Number of requested stocks: {len(request.stock)} exceeds maximum allowed ({yahoo_api_settings.max_stocks_per_request})")
 
         tickers = request.stock if isinstance(request.stock, str) else ",".join(request.stock)
         start_date = request.start_date
