@@ -59,7 +59,7 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
     yfd.return_value = data
 
     import src.db.main
-    h5_append = mocker.spy(src.db.main.pd.HDFStore, "append")
+    h5_put = mocker.spy(src.db.main.pd.HDFStore, "put")
 
     # Two of the same calls, first should request new data, second should pull existing data
     database_api.get_data(request=fake_year_request)
@@ -68,13 +68,13 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
     # Shorter request over same period, should also pull existing data
     database_api.get_data(request=fake_month_request)
 
-    assert h5_append.call_count == 1
+    assert h5_put.call_count == 1
     assert yfd.call_count == 1
 
     db_data = DataFrame(database_api.store.get(h5_key))
     assert db_data.shape[0] == data.shape[0]
 
-    # Create request that should result in new download and append call
+    # Create request that should result in new download and put call
     next_day_request = fake_year_request.copy()
     next_day_request.end_date += timedelta(days=1)
 
@@ -83,7 +83,7 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
 
     database_api.get_data(request=next_day_request)
 
-    assert h5_append.call_count == 2
+    assert h5_put.call_count == 2
     assert yfd.call_count == 2
 
     new_db_data = DataFrame(database_api.store.get(h5_key))
