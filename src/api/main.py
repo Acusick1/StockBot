@@ -2,13 +2,18 @@ import requests
 import json
 import pandas as pd
 import yfinance as yf
-from datetime import timedelta
+from datetime import datetime, timedelta
+from time import sleep
 from typing import Union, Optional, Dict
 from src.db import schemas
 from config import yahoo_api_settings
 
 
 class FinanceApi:
+
+    last_request = None
+    poll_frequency = yahoo_api_settings.poll_frequency
+    max_stocks_per_request = yahoo_api_settings.max_stocks_per_request
 
     def __init__(self,
                  group_by: str = "ticker",
@@ -57,13 +62,9 @@ class FinanceApi:
             overwritten.
         """
 
-        # Take copy of default arguments, and update with key word arguments if passed
-        params = self.default_params.copy()
-        params.update(kwargs)
-
-        if len(request.stock) > yahoo_api_settings.max_stocks_per_request:
+        if len(request.stock) > self.max_stocks_per_request:
             
-            raise ValueError(f"Number of requested stocks: {len(request.stock)} exceeds maximum allowed ({yahoo_api_settings.max_stocks_per_request})")
+            raise ValueError(f"Number of requested stocks: {len(request.stock)} exceeds maximum allowed ({self.max_stocks_per_request})")
 
         tickers = request.stock if isinstance(request.stock, str) else ",".join(request.stock)
         start_date = request.start_date
@@ -78,13 +79,13 @@ class FinanceApi:
             start_date += timedelta(days=1)
             end_date += timedelta(days=1)
 
-        output = yf.download(
+        output = self._download(
             tickers=tickers,
             # start=start_date,
             # end=end_date,
             period=period,
             interval=interval_key,
-            **params
+            **kwargs
         )
 
         if output is not None:
@@ -97,6 +98,28 @@ class FinanceApi:
                 tail_delta = int((output.index[-1] - output.index[-2]).total_seconds())
                 if tail_delta != head_delta:
                     output.drop(output.index[-1], inplace=True)
+
+        return output
+    
+    def _download(self, **kwargs):
+        """
+        Wrapper around 'yfinance.download' to request data, while respecting the API poll frequency
+
+        Parameters
+        ----------
+        kwargs: additional parameters to pass to the yfinance API
+        """
+
+        # Take copy of default arguments, and update with key word arguments if passed
+        params = self.default_params.copy()
+        params.update(kwargs)
+
+        since_last = (datetime.now() - self.last_request).total_seconds() if self.last_request is not None else float("inf")
+        if self.poll_frequency > since_last:
+            sleep(self.poll_frequency - since_last)
+        
+        output = yf.download(**params)
+        self.last_request = datetime.now()
 
         return output
 
