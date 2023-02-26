@@ -39,7 +39,7 @@ class DatabaseApi:
 
         return data
 
-    def get_data(self, request: schemas.RequestBase, request_nan: bool = False):
+    def get_data(self, request: schemas.RequestBase, request_nan: bool = False, force: bool = False):
         """
         Get data from an input request. Will first query internal database, if data is missing it will make an API call.
 
@@ -49,6 +49,7 @@ class DatabaseApi:
         request_nan: Whether to drop NaNs from data returned from database query, this guarantees an API request will be
             made if any value is NaN. The API data has many missing values, so this should only be used for infrequent
             or scheduled maintenance calls.
+        force: Make API call without checking internal database. Useful for fixing broken data.
         """
 
         # Taking a copy since we may make changes to stocks
@@ -57,37 +58,39 @@ class DatabaseApi:
         base_indices = get_indices(
             request=request, calendar=self.calendar, frequency=request.get_base_interval())
 
-        # Search slightly outwith bounds to ensure time is not excluding results
-        start_date = request.start_date - timedelta(days=1)
-        end_date = request.end_date + timedelta(days=1)
-
         data = {}
         diff = {}
-        for tick in request.stock:
 
-            key = request.get_h5_key(tick)
-            db_data = self.get_db_data(
-                key, start_date=start_date, end_date=end_date)
+        if not force:
+            # Search slightly outwith bounds to ensure time is not excluding results
+            start_date = request.start_date - timedelta(days=1)
+            end_date = request.end_date + timedelta(days=1)
 
-            if db_data is None or not db_data.shape[0]:
-                diff[tick] = base_indices
-                continue
+            for tick in request.stock:
 
-            # Drop NaNs before checking for differences
-            if request_nan:
-                db_data = db_data.dropna()
+                key = request.get_h5_key(tick)
+                db_data = self.get_db_data(
+                    key, start_date=start_date, end_date=end_date)
 
-            # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
-            # compare dates instead
-            diff_dates = set(base_indices.date) - set(db_data.index.date)
+                if db_data is None or not db_data.shape[0]:
+                    diff[tick] = base_indices
+                    continue
 
-            if diff_dates:
-                # Now take difference at lowest level (may still be dates only) to filter request data for
-                # database insertion
-                diff[tick] = base_indices.difference(db_data.index)
-            else:
-                # All data present in database, no need to make request, can assign data directly
-                data[tick] = db_data
+                # Drop NaNs before checking for differences
+                if request_nan:
+                    db_data = db_data.dropna()
+
+                # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
+                # compare dates instead
+                diff_dates = set(base_indices.date) - set(db_data.index.date)
+
+                if diff_dates:
+                    # Now take difference at lowest level (may still be dates only) to filter request data for
+                    # database insertion
+                    diff[tick] = base_indices.difference(db_data.index)
+                else:
+                    # All data present in database, no need to make request, can assign data directly
+                    data[tick] = db_data
 
         mi = pd.concat(data, axis=1) if data else None
         request.stock = list(set(request.stock) - set(data.keys()))
@@ -113,19 +116,21 @@ class DatabaseApi:
 
                     tick = str(tick)
                     df = df.droplevel(0, axis=1)
-                    df = df.filter(items=diff[tick], axis=0)
+
+                    if tick in diff:
+                        df = df.filter(items=diff[tick], axis=0)
                     
                     # Joining, keeping fresh data, and sorting
                     # Reading, merging and overwriting stored data here may take a while, but appending can be error prone.
                     #   At least this way the duplicates and sorting is done immediately.
+                    key = request.get_h5_key(tick)
                     if key in self.store.keys():
                         df = pd.concat([self.store.get(key), df])
                     
-                    df.index = df.index.drop_duplicates(keep="last")
+                    df = df[~df.index.duplicated(keep="last")]
                     df = df.sort_index()
 
-                    self.store.put(key=request.get_h5_key(
-                        tick), value=df, format="table")
+                    self.store.put(key=key, value=df, format="table")
 
                 mi = pd.concat([mi, response], axis=1)
 
