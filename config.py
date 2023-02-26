@@ -4,8 +4,9 @@ from pydantic import BaseSettings
 
 class Settings(BaseSettings):
 
-    data_path = Path(__file__).parent.resolve() / "data"
-    stock_history_file = data_path / "stock_history.h5"
+    base_path: Path = Path(__file__).parent.resolve()
+    data_path: Path = base_path / "data"
+    stock_history_file: Path = data_path / "stock_history.h5"
     date_fmt: str = "%Y-%m-%d"
 
     class Config:
@@ -16,6 +17,7 @@ class YahooApiSettings(BaseSettings):
 
     api_key: str
     poll_frequency: float = 0.25
+    max_stocks_per_request: int = 10
 
     class Config:
         env_file = Path(__file__).parent.resolve() / ".env"

@@ -22,10 +22,10 @@ class Trade(BaseModel):
     def class_validator(cls, values):
 
         if "value" in values:
-            values["quantity"] = values["value"] / values["buy_price"]
+            values["quantity"] = values["value"] / values["open_price"]
         
         elif "quantity" in values:
-            values["value"] = values["buy_price"] * values["quantity"]
+            values["value"] = values["open_price"] * values["quantity"]
 
         else:
             raise ValueError("Either value or quantity must be specified")
