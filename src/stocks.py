@@ -14,7 +14,7 @@ class Trade(BaseModel):
     close_stamp: Optional[datetime]
     open_price: float
     close_price: Optional[float]
-    quantity: Optional[int]
+    quantity: Optional[float]
     value: Optional[float]
     type: str
 
