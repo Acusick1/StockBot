@@ -1,22 +1,19 @@
 from backtesting import Backtest
-from strategies.daily import SmaCross
-from src.db import schemas
+from strategies import daily
 from src.db.main import DatabaseApi
+from config import EXAMPLE_STOCKS
 
 
 if __name__ == "__main__":
 
-    stocks = ["AAPL", "F", "AMD", "NVDA", "MSFT"]
-
-    request = schemas.RequestBase(stock=stocks, interval="1d", period="1y", flat=False)
-
     api = DatabaseApi()
-    data = api.get_data(request=request)
+    data = api.request(stock=EXAMPLE_STOCKS, interval="1d", period="1y")
 
     for _, df in data.groupby(level=0, axis=1):
 
         df = df.droplevel(0, axis=1)
-        bt = Backtest(df, SmaCross, cash=10_000, commission=.002)
+        df["Close"] = df["Adj Close"]
+        bt = Backtest(df, daily.SmaCross, cash=10_000, commission=.002)
 
         # stats = bt.run()
         stats = bt.optimize(
