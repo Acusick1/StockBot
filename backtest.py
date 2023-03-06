@@ -1,26 +1,86 @@
-from backtesting import Backtest
+import numpy as np
+import pandas as pd
+from backtesting import Backtest, Strategy
+from functools import partial
+from hyperopt import fmin, hp, space_eval, tpe, STATUS_OK
+from typing import Any, Optional
 from strategies import daily
 from src.db.main import DatabaseApi
 from config import EXAMPLE_STOCKS
 
 
-if __name__ == "__main__":
+def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]] = None):
 
-    api = DatabaseApi()
-    data = api.request(stock=EXAMPLE_STOCKS, interval="1d", period="1y")
+    if params is not None:
+        _ = strategy._check_params(strategy, params)
 
-    for _, df in data.groupby(level=0, axis=1):
+    out, all_bt = {}, {}
+    for stock, df in data.groupby(level=0, axis=1):
 
         df = df.droplevel(0, axis=1)
         df["Close"] = df["Adj Close"]
-        bt = Backtest(df, daily.SmaCross, cash=10_000, commission=.002)
+        df = df.dropna()
+        bt = Backtest(df, strategy, cash=10_000, commission=.002)
 
-        # stats = bt.run()
-        stats = bt.optimize(
-            sma1=[5, 10, 15],
-            sma2=[10, 20, 40],
-            constraint=lambda p: p.sma1 < p.sma2
-        )
+        out[stock] = bt.run()
+        all_bt[stock] = bt
 
-        print(stats)
+    return out, all_bt
+
+
+def opt(data: pd.MultiIndex, strategy: Strategy, param_space: dict[str, Any], **kwargs):
+    
+    obj_func = partial(objective, strategy=strategy, data=data)
+
+    return fmin(obj_func, param_space, algo=tpe.suggest, **kwargs)
+
+
+def objective(params, strategy, data):
+
+    _ = strategy._check_params(strategy, params)
+    stats, _ = run(data=data, strategy=strategy)
+    stats = pd.DataFrame(stats).transpose()
+
+    ## Different functions for loss
+    # loss = -(stats["Return [%]"] + 100).min()
+    # loss = -stats["Return [%]"].sum()
+    # loss = -stats["Sortino Ratio"].mean()
+    loss = -stats["Sharpe Ratio"].mean()
+    # loss = -(stats.loc[stats["# Trades"] > 0, "Max. Drawdown [%]"]).mean()
+
+    return {"loss": loss, "status": STATUS_OK}
+
+
+if __name__ == "__main__":
+
+    api = DatabaseApi()
+    data = api.request(stock=EXAMPLE_STOCKS, interval="1d", period="6mo")
+
+    # strategy = daily.SmaCross
+
+    # strategy_param_space = {
+    #     "n1": hp.choice("n1", [5, 10, 15]),
+    #     "n2": hp.choice("n2", [10, 20, 40]),
+    # }
+
+    strategy = daily.MacdGradDerivCross
+
+    strategy_param_space = {
+        "smooth": hp.uniformint("smooth", 0, 12),
+        "threshold": hp.uniform("threshold", -0.25, 0.25),
+    }
+
+    best = opt(
+        data, 
+        strategy=strategy,
+        param_space=strategy_param_space, 
+        max_evals=100
+    )
+
+    best_params = space_eval(strategy_param_space, best)
+    print(best_params)
+
+    stats, all_bt = run(data, strategy=strategy, params=best_params)
+
+    for bt in all_bt.values():
         bt.plot()
