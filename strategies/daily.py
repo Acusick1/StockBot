@@ -14,11 +14,15 @@ class SmaCross(Strategy):
     sma2 = None
 
     def init(self):
+        super().init()
+
         # Precompute the two moving averages
         self.sma1 = self.I(simple_moving_avg, self.data.Close, self.n1)
         self.sma2 = self.I(simple_moving_avg, self.data.Close, self.n2)
 
     def next(self):
+        super().next()
+
         # If sma1 crosses above sma2, close any existing
         # short trades, and buy the asset
         if crossover(self.sma1, self.sma2):
@@ -38,11 +42,15 @@ class MacdSignalCross(TrailingStrategy):
     singal = None
 
     def init(self):
+        super().init()
+
         # Precompute macd and signal
         self.macd, self.signal = self.I(macd_signal, self.data.Close)
-        self.set_trailing_sl(0.0001)
+        self.set_trailing_sl(2)
 
     def next(self):
+        super().next()
+
         # If macd crosses above signal, close any existing
         # short trades, and buy the asset
         if crossover(self.macd, self.signal):
@@ -64,11 +72,15 @@ class MacdDerivCross(TrailingStrategy):
     threshold = 0.
 
     def init(self):
+        super().init()
+
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
         self.macd_deriv, self.signal = self.I(macd_deriv_signal, self.macd, name="MACD'")
+        self.set_trailing_sl(2)
 
     def next(self):
+        super().next()
 
         if crossover(self.macd_deriv, self.signal):
             self.position.close()
@@ -87,11 +99,15 @@ class MacdGradCross(TrailingStrategy):
     threshold = 0.
 
     def init(self):
+        super().init()
+
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
         self.macd_grad, self.signal = self.I(macd_grad_signal, self.macd, name="MACD'")
+        self.set_trailing_sl(2)
 
     def next(self):
+        super().next()
 
         if crossover(self.macd_grad, self.signal):
             self.position.close()
@@ -112,12 +128,16 @@ class MacdGradDerivCross(TrailingStrategy):
     smooth = 0
 
     def init(self):
+        super().init()
+
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
         self.macd_grad, self.macd_deriv = self.I(macd_grad_deriv, self.macd, name="MACD'", smooth=self.smooth)
         self.signal = np.zeros(self.macd.shape) + self. threshold
+        self.set_trailing_sl(2)
 
     def next(self):
+        super().next()
 
         if (crossover(self.macd_grad, self.signal) and self.macd_deriv >= 0 or
             crossover(self.macd_deriv, self.signal) and self.macd_grad >= 0):
@@ -140,12 +160,16 @@ class MacdGradCheat(TrailingStrategy):
     threshold = 0.
 
     def init(self):
+        super().init()
+
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
         self.macd_grad = self.I(pd.Series, np.gradient(self.macd), name="MACD'")
         self.signal = self.I(pd.Series, np.zeros(self.macd.shape), name="Zero")
+        self.set_trailing_sl(2)
 
     def next(self):
+        super().next()
 
         if crossover(self.macd_grad, self.signal):
             self.position.close()
