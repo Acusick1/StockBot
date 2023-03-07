@@ -6,6 +6,7 @@ from hyperopt import fmin, hp, space_eval, tpe, STATUS_OK
 from typing import Any, Optional
 from strategies import daily
 from src.db.main import DatabaseApi
+from utils.tickers import get_snp500
 from config import EXAMPLE_STOCKS
 
 
@@ -20,7 +21,7 @@ def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]
         df = df.droplevel(0, axis=1)
         df["Close"] = df["Adj Close"]
         df = df.dropna()
-        bt = Backtest(df, strategy, cash=10_000, commission=.002)
+        bt = Backtest(df, strategy, cash=1000, commission=.002)
 
         out[stock] = bt.run()
         all_bt[stock] = bt
@@ -45,7 +46,7 @@ def objective(params, strategy, data):
     # loss = -(stats["Return [%]"] + 100).min()
     # loss = -stats["Return [%]"].sum()
     # loss = -stats["Sortino Ratio"].mean()
-    loss = -stats["Sharpe Ratio"].mean()
+    loss = -stats.loc[stats["# Trades"] > 0, "Sharpe Ratio"].mean()
     # loss = -(stats.loc[stats["# Trades"] > 0, "Max. Drawdown [%]"]).mean()
 
     return {"loss": loss, "status": STATUS_OK}
@@ -54,7 +55,9 @@ def objective(params, strategy, data):
 if __name__ == "__main__":
 
     api = DatabaseApi()
-    data = api.request(stock=EXAMPLE_STOCKS, interval="1d", period="6mo")
+    # stocks = EXAMPLE_STOCKS
+    stocks = get_snp500()[:50]
+    data = api.request(stock=stocks, interval="1d", period="1y")
 
     # strategy = daily.SmaCross
 
@@ -82,5 +85,9 @@ if __name__ == "__main__":
 
     stats, all_bt = run(data, strategy=strategy, params=best_params)
 
-    for bt in all_bt.values():
-        bt.plot()
+    all_stats = pd.DataFrame(stats).transpose()
+
+    print(all_stats.mean(numeric_only=False))
+
+    # for bt in all_bt.values():
+    #     bt.plot()
