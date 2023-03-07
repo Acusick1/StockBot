@@ -239,6 +239,11 @@ def macd(values, n_fast: int = 12, n_slow: int = 26):
     return macd
 
 
+def smoother(func, _smooth: int = 9, *args, **kwargs):
+
+    return func(*args, **kwargs).ewm(span=_smooth, adjust=False).mean()
+
+
 def macd_deriv(values, **kwargs):
 
     md = macd(values, **kwargs)
@@ -249,6 +254,11 @@ def macd_grad(values, **kwargs):
 
     md = macd(values, **kwargs)
     return pd.Series(np.gradient(md))
+
+
+def threshold_signal(shape, threshold: float):
+
+    return np.zeros(shape) + threshold
 
 
 if __name__ == "__main__":
