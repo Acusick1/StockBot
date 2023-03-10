@@ -1,5 +1,7 @@
+import numpy as np
 import pandas as pd
 from typing import Dict
+from src.db.main import DatabaseApi
 
 
 def add_analysis(data: pd.DataFrame):
@@ -44,3 +46,48 @@ def build(data: Dict[str, pd.DataFrame] = None):
         data[stock] = add_analysis(df)
 
     return data
+
+
+def calculate_volatility(data: pd.Series):
+    """
+    Calculate volatility of input data
+    """
+
+    # Calculate the daily returns of the stock
+    pct_change = data.pct_change()
+
+    # Calculate the volatility (standard deviation) of the daily returns
+    volatility = np.sqrt(data.shape[0]) * pct_change.std()
+    return volatility
+
+
+def calculate_weighted_volatility(data: pd.Series, window: int, lambda_: float = 0.95):
+    """
+    Calculate the volatility using an Exponentially Weighted Moving Average (EWMA) approach.
+
+    Parameters:
+    data: A list or pandas.Series of historical prices or returns.
+    window: The size of the rolling window.
+    lambda_: The weighting factor (smoothing factor).
+
+    Returns:
+    float: The EWMA volatility.
+    """
+    returns = data.pct_change().dropna()
+    volatility = returns.ewm(alpha=lambda_, min_periods=window).std()[-1]
+    return volatility
+
+
+def calculate_beta(stock: str, period: str = "1y", comp_stock: str = "^GSPC"):
+    """
+    Calculate volatility of a stock compared to the market over a give period
+    """
+    api = DatabaseApi()
+    
+    stock_change = api.request([stock], period=period)["Adj Close"].pct_change()
+    market_change = api.request([comp_stock], period=period)["Adj Close"].pct_change()
+
+    cov = stock_change.cov(market_change)
+    market_variance = market_change.std() ** 2
+    beta = cov / (market_variance ** 2)
+    return beta

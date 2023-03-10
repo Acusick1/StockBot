@@ -6,7 +6,7 @@ from hyperopt import fmin, hp, space_eval, tpe, STATUS_OK
 from typing import Any, Optional
 from strategies import daily
 from src.db.main import DatabaseApi
-from utils.tickers import get_snp500
+from utils.tickers import get_snp500_tickers
 from config import EXAMPLE_STOCKS
 
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     api = DatabaseApi()
     # stocks = EXAMPLE_STOCKS
-    stocks = get_snp500()[:50]
+    stocks = get_snp500_tickers()[:50]
     data = api.request(stock=stocks, interval="1d", period="1y")
 
     # strategy = daily.SmaCross
