@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from src.api.main import FinanceApi
 from src.db import schemas
 from utils.hdf5 import h5_key_elements
+from utils.gen import chunk
 from config import settings
 
 
@@ -175,10 +176,10 @@ class DatabaseApi:
         if tickers is None:
             tickers = self.get_stored_tickers(group="daily")
 
-        step = self.api.max_stocks_per_request
-        for i in range(0, len(tickers), step):
+        chunked_tickers = chunk(tickers, size=self.api.max_stocks_per_request)
+        for group in chunked_tickers:
 
-            req = schemas.RequestBase(stock=tickers[i:i+step])
+            req = schemas.RequestBase(stock=group)
             _ = self.get_data(req, *args, **kwargs)
 
     def get_stored_tickers(self, group: str = "daily"):

@@ -1,7 +1,12 @@
 import numpy as np
 import pandas as pd
 from collections import abc
-from typing import Any, Union, Dict, List, Tuple
+from typing import Any, Union, Dict, List, Tuple, Iterable
+
+
+def chunk(data: Iterable, size: int):
+
+    return [data[i : i + size] for i in range(0, len(data), size)]
 
 
 def validate_strict_args(inp: Any, options: Union[List, Tuple], name: str, optional: bool = False) -> None:
