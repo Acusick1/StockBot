@@ -89,5 +89,5 @@ def calculate_beta(stock: str, period: str = "1y", comp_stock: str = "^GSPC"):
 
     cov = stock_change.cov(market_change)
     market_variance = market_change.std() ** 2
-    beta = cov / (market_variance ** 2)
+    beta = cov / market_variance
     return beta
