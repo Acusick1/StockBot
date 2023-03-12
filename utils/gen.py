@@ -1,7 +1,46 @@
+import functools
 import numpy as np
 import pandas as pd
 from collections import abc
 from typing import Any, Union, Dict, List, Tuple, Iterable
+
+
+def batch(size: int, retry_items: bool = True):
+    """
+    A decorator to processes a large number of inputs through a function in batches of a set size.
+
+    Parameters
+    ----------
+    size: The maximum number of items to pass to the function at a time.
+    retry_items: Whether to retry items individually if a batch fails.
+
+    Returns
+    -------
+    function: The decorated function.
+    """
+
+    def decorator(func, *args, **kwargs):
+
+        @functools.wraps(func)
+        def wrapper(input_list) -> list[Any]:
+            
+            results = []
+            for i in range(0, len(input_list), size):
+                
+                batch = input_list[i : i + size]
+                result = func(batch, *args, **kwargs)
+                
+                # Retry if no return
+                if result is None and retry_items:
+                    print("No return from batch, retrying items individually")
+                    results.extend([func(item, *args, **kwargs) for item in batch])
+                else:
+                    results.append(result)
+
+            return results
+
+        return wrapper
+    return decorator
 
 
 def chunk(data: Iterable, size: int):
