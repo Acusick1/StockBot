@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from time import sleep
 from typing import Union, Optional, Dict
 from src.db import schemas
+from utils.gen import batch
 from config import yahoo_api_settings
 
 
@@ -62,11 +63,7 @@ class FinanceApi:
             overwritten.
         """
 
-        if len(request.stock) > self.max_stocks_per_request:
-            
-            raise ValueError(f"Number of requested stocks: {len(request.stock)} exceeds maximum allowed ({self.max_stocks_per_request})")
-
-        tickers = request.stock if isinstance(request.stock, str) else ",".join(request.stock)
+        tickers = [request.stock] if isinstance(request.stock, str) else request.stock
         start_date = request.start_date
         end_date = request.end_date
         period = request.period
@@ -101,7 +98,8 @@ class FinanceApi:
 
         return output
     
-    def _download(self, **kwargs):
+    @batch(size=yahoo_api_settings.max_stocks_per_request, concat_axis=1)
+    def _download(self, tickers, **kwargs):
         """
         Wrapper around 'yfinance.download' to request data, while respecting the API poll frequency
 
@@ -118,7 +116,7 @@ class FinanceApi:
         if self.poll_frequency > since_last:
             sleep(self.poll_frequency - since_last)
         
-        output = yf.download(**params)
+        output = yf.download(tickers, **params)
         self.last_request = datetime.now()
 
         return output
