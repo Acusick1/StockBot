@@ -20,6 +20,7 @@ pandas-market-calendars = "^4.0"
 Backtesting = "^0.3.3"
 hyperopt = "^0.2.7"
 pandas-datareader = "^0.10.0"
+wrapt = "^1.15.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.3"

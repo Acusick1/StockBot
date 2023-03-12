@@ -7,7 +7,7 @@ from utils.gen import batch
 from config import settings, yahoo_api_settings
 
 
-@batch(size=yahoo_api_settings.max_stocks_per_request)
+@batch(size=yahoo_api_settings.max_stocks_per_request, concat_axis=0)
 def get_stock_metadata(tickers: list[str]) -> pd.DataFrame:
 
     try:
@@ -28,5 +28,4 @@ if __name__ == "__main__":
     tickers = db.get_stored_tickers(group="daily")
 
     metadata = get_stock_metadata(tickers)
-    metadata = pd.concat(metadata)
     metadata.to_csv(settings.stock_metadata_file)

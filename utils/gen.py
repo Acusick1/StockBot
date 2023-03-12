@@ -1,11 +1,11 @@
-import functools
 import numpy as np
 import pandas as pd
+import wrapt
 from collections import abc
-from typing import Any, Union, Dict, List, Tuple, Iterable
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
-def batch(size: int, retry_items: bool = True):
+def batch(size: int, retry_items: bool = True, concat_axis: Optional[int] = None):
     """
     A decorator to processes a large number of inputs through a function in batches of a set size.
 
@@ -13,34 +13,42 @@ def batch(size: int, retry_items: bool = True):
     ----------
     size: The maximum number of items to pass to the function at a time.
     retry_items: Whether to retry items individually if a batch fails.
+    concat_axis: Axis to concatenate results, only necessary if output from original function is a Series or DataFrame.
 
     Returns
     -------
     function: The decorated function.
     """
 
-    def decorator(func, *args, **kwargs):
+    @wrapt.decorator
+    def wrapper(func, instance, args, kwargs) -> list[Any]:
+        
+        if args:
+            input_list, args = args[0], args[1:]
+        else:
+            input_list = kwargs.pop(next(iter(kwargs)))
 
-        @functools.wraps(func)
-        def wrapper(input_list) -> list[Any]:
+        results = []
+        for i in range(0, len(input_list), size):
             
-            results = []
-            for i in range(0, len(input_list), size):
-                
-                batch = input_list[i : i + size]
-                result = func(batch, *args, **kwargs)
-                
-                # Retry if no return
-                if result is None and retry_items:
-                    print("No return from batch, retrying items individually")
-                    results.extend([func(item, *args, **kwargs) for item in batch])
-                else:
-                    results.append(result)
+            batch = input_list[i : i + size]
+            result = func(batch, *args, **kwargs)
+            
+            # Retry if no return
+            if result is None and retry_items:
+                print("No return from batch, retrying items individually")
+                results.extend([func(item, *args, **kwargs) for item in batch])
+            else:
+                results.append(result)
 
-            return results
+        if isinstance(results[0], (pd.Series, pd.DataFrame)) and concat_axis is not None:
+            results = pd.concat(results, axis=concat_axis)
 
-        return wrapper
-    return decorator
+        elif isinstance(results[0], list):
+            results = [item for sublist in results for item in sublist]
+
+        return results
+    return wrapper
 
 
 def chunk(data: Iterable, size: int):
