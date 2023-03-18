@@ -23,7 +23,7 @@ class DatabaseApi:
         self.calendar = mcal.get_calendar(market)
         self.store = pd.HDFStore(str(store_path))
 
-    def request(self, stock: list[str], interval="1d", period="1y", start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, flat: bool = True, *args, **kwargs):
+    def request(self, stock: list[str], interval="1d", period="1y", start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, flat: bool = False, *args, **kwargs):
         """
         Wrapper around request creation and get_data to avoid making request pre-api call.
 

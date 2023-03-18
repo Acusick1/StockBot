@@ -91,3 +91,18 @@ def calculate_beta(stock: str, period: str = "1y", comp_stock: str = "^GSPC"):
     market_variance = market_change.std() ** 2
     beta = cov / market_variance
     return beta
+
+
+if __name__ == "__main__":
+
+    from ta import add_all_ta_features
+    from ta.utils import dropna
+
+    ticker = "MSFT"
+    
+    db = DatabaseApi()
+    df = db.request(ticker).loc[:, ticker].copy()
+    df = dropna(df)
+    
+    df = add_all_ta_features(df, open="Open", high="High", low="Low", close="Close", volume="Volume")
+    print(df)

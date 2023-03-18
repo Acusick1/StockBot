@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
     all_stats = pd.DataFrame(stats).transpose()
 
-    print(all_stats.mean(numeric_only=False))
+    print(all_stats.loc[:, ~all_stats.columns.str.startswith("_")].mean(numeric_only=False))
 
     # for bt in all_bt.values():
     #     bt.plot()
