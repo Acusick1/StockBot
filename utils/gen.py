@@ -88,3 +88,28 @@ def dataframe_from_dict(d: dict) -> pd.DataFrame:
 
 def get_key_from_value(d: Dict[str, Any], v: Any):
     return list(d.keys())[list(d.values()).index(v)]
+
+
+def flatten_dict(nested_dict, sep="__"):
+    flattened_dict = {}
+    for key, value in nested_dict.items():
+        if isinstance(value, dict):
+            flattened_subdict = flatten_dict(value, sep=sep)
+            for subkey, subvalue in flattened_subdict.items():
+                flattened_dict[key + sep + subkey] = subvalue
+        else:
+            flattened_dict[key] = value
+    return flattened_dict
+
+
+def unflatten_dict(flattened_dict, sep="__"):
+    nested_dict = {}
+    for key, value in flattened_dict.items():
+        keys = key.split(sep)
+        subdict = nested_dict
+        for k in keys[:-1]:
+            if k not in subdict:
+                subdict[k] = {}
+            subdict = subdict[k]
+        subdict[keys[-1]] = value
+    return nested_dict
