@@ -10,7 +10,7 @@ from utils.tickers import get_snp500_tickers
 from config import EXAMPLE_STOCKS
 
 
-def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]] = None):
+def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]] = None, **kwargs):
 
     if params is not None:
         _ = strategy._check_params(strategy, params)
@@ -23,15 +23,13 @@ def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]
         df = df.dropna()
         bt = Backtest(df, strategy, cash=1000, commission=.002)
 
-        out[stock] = bt.run()
+        out[stock] = bt.run(**kwargs)
         all_bt[stock] = bt
 
     return out, all_bt
 
 
-def opt(data: pd.MultiIndex, strategy: Strategy, param_space: dict[str, Any], **kwargs):
-    
-    obj_func = partial(objective, strategy=strategy, data=data)
+def opt(obj_func, param_space: dict[str, Any], **kwargs):
 
     return fmin(obj_func, param_space, algo=tpe.suggest, **kwargs)
 
@@ -61,26 +59,37 @@ if __name__ == "__main__":
 
     # strategy = daily.SmaCross
 
-    # strategy_param_space = {
+    # param_space = {
     #     "n1": hp.choice("n1", [5, 10, 15]),
     #     "n2": hp.choice("n2", [10, 20, 40]),
     # }
 
     strategy = daily.MacdGradDerivCross
 
-    strategy_param_space = {
+    param_space = {
+        "buy_sell": hp.uniformint("buy_sell", 0, 2),
         "smooth": hp.uniformint("smooth", 0, 12),
         "threshold": hp.uniform("threshold", -0.25, 0.25),
     }
 
+    # strategy = daily.MacdEma
+
+    # param_space = {
+    #     "n1": hp.uniformint("n1", 3, 10),
+    #     "n2": hp.uniformint("n2", 14, 40),
+    #     "threshold1": hp.uniform("threshold1", -1, 1),
+    #     "threshold2": hp.uniform("threshold2", -1, 1)
+    # }
+
+    obj_func = partial(objective, strategy=strategy, data=data)
+
     best = opt(
-        data, 
-        strategy=strategy,
-        param_space=strategy_param_space, 
-        max_evals=100
+        obj_func,
+        param_space=param_space, 
+        max_evals=10
     )
 
-    best_params = space_eval(strategy_param_space, best)
+    best_params = space_eval(param_space, best)
     print(best_params)
 
     stats, all_bt = run(data, strategy=strategy, params=best_params)

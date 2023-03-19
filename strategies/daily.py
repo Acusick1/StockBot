@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover, TrailingStrategy
+from backtesting.lib import TrailingStrategy, crossover
 from backtesting.test import GOOG
 
 
@@ -126,6 +126,7 @@ class MacdGradDerivCross(TrailingStrategy):
     signal = None
     threshold = 0.
     smooth = 0
+    buy_sell = 2
 
     def init(self):
         super().init()
@@ -139,15 +140,19 @@ class MacdGradDerivCross(TrailingStrategy):
     def next(self):
         super().next()
 
-        if (crossover(self.macd_grad, self.signal) and self.macd_deriv >= 0 or
-            crossover(self.macd_deriv, self.signal) and self.macd_grad >= 0):
+        if (crossover(self.macd_grad, self.signal) and self.macd_deriv[-1] >= self.threshold or
+            crossover(self.macd_deriv, self.signal) and self.macd_grad[-1] >= self.threshold):
             self.position.close()
-            self.buy()
 
-        elif (crossover(self.signal, self.macd_grad) and self.macd_deriv <= 0 or
-            crossover(self.signal, self.macd_deriv) and self.macd_grad <= 0):
+            if self.buy_sell in [0, 2]:
+                self.buy()
+
+        elif (crossover(-self.signal, self.macd_grad) and self.macd_deriv[-1] <= -self.threshold or
+            crossover(-self.signal, self.macd_deriv) and self.macd_grad[-1] <= -self.threshold):
             self.position.close()
-            self.sell()
+            
+            if self.buy_sell in [1, 2]:
+                self.sell()
 
 
 class MacdGradCheat(TrailingStrategy):
