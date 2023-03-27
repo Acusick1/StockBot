@@ -86,6 +86,13 @@ def dataframe_from_dict(d: dict) -> pd.DataFrame:
     return df
 
 
+def multiindex_from_dict(d: dict) -> pd.MultiIndex:
+    """Creating pandas DataFrame from a nested dictionary."""
+
+    reform = {(outer_key, inner_key): values for outer_key, inner_dict in d.items() for inner_key, values in inner_dict.items()}
+    return pd.DataFrame(reform)
+
+
 def get_key_from_value(d: Dict[str, Any], v: Any):
     return list(d.keys())[list(d.values()).index(v)]
 

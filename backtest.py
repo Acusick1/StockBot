@@ -7,6 +7,7 @@ from sklearn.model_selection import KFold
 from typing import Any, Optional
 from strategies import daily
 from src.db.main import DatabaseApi
+from utils import gen
 from utils.tickers import get_snp500_tickers
 from config import EXAMPLE_STOCKS
 
@@ -83,11 +84,14 @@ if __name__ == "__main__":
     # }
 
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    all_stats, reduced_stats = [], []
+    all_stats, reduced_stats = {}, {}
 
-    for train_id, _ in kf.split(stocks):
+    i = 0
+    for train_id, test_id in kf.split(stocks):
 
         train_stocks = np.array(stocks)[train_id]
+        test_stocks = np.array(stocks)[test_id]
+
         obj_func = partial(objective, strategy=strategy, data=data[train_stocks])
 
         best = opt(
@@ -99,16 +103,20 @@ if __name__ == "__main__":
         best_params = space_eval(param_space, best)
         print(best_params)
 
-        stats, all_bt = run(data, strategy=strategy, params=best_params)
-        all_stats.append(stats)
+        stats, all_bt = run(data[test_stocks], strategy=strategy, params=best_params)
+        df_stats = pd.DataFrame(stats).transpose()
+        
+        all_stats[f"run{i}"] = stats
 
         # Taking mean of numeric columns
-        df_stats = pd.DataFrame(stats).transpose()
-        reduced_stats.append(df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean(numeric_only=False))
+        reduced_stats[f"run{i}"] = df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean(numeric_only=False)
 
+        i += 1
 
     reduced_stats = pd.concat(reduced_stats, axis=1)
     print(reduced_stats)
 
+    all_stats = gen.multiindex_from_dict(all_stats)
+    print(all_stats)
     # for bt in all_bt.values():
     #     bt.plot()
