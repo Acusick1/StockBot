@@ -3,6 +3,7 @@ import pandas as pd
 from backtesting import Backtest, Strategy
 from functools import partial
 from hyperopt import fmin, hp, space_eval, tpe, STATUS_OK
+from sklearn.model_selection import KFold
 from typing import Any, Optional
 from strategies import daily
 from src.db.main import DatabaseApi
@@ -81,22 +82,33 @@ if __name__ == "__main__":
     #     "threshold2": hp.uniform("threshold2", -1, 1)
     # }
 
-    obj_func = partial(objective, strategy=strategy, data=data)
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    all_stats, reduced_stats = [], []
 
-    best = opt(
-        obj_func,
-        param_space=param_space, 
-        max_evals=10
-    )
+    for train_id, _ in kf.split(stocks):
 
-    best_params = space_eval(param_space, best)
-    print(best_params)
+        train_stocks = np.array(stocks)[train_id]
+        obj_func = partial(objective, strategy=strategy, data=data[train_stocks])
 
-    stats, all_bt = run(data, strategy=strategy, params=best_params)
+        best = opt(
+            obj_func,
+            param_space=param_space,
+            max_evals=10
+        )
 
-    all_stats = pd.DataFrame(stats).transpose()
+        best_params = space_eval(param_space, best)
+        print(best_params)
 
-    print(all_stats.loc[:, ~all_stats.columns.str.startswith("_")].mean(numeric_only=False))
+        stats, all_bt = run(data, strategy=strategy, params=best_params)
+        all_stats.append(stats)
+
+        # Taking mean of numeric columns
+        df_stats = pd.DataFrame(stats).transpose()
+        reduced_stats.append(df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean(numeric_only=False))
+
+
+    reduced_stats = pd.concat(reduced_stats, axis=1)
+    print(reduced_stats)
 
     # for bt in all_bt.values():
     #     bt.plot()
