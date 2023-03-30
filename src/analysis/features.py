@@ -55,7 +55,7 @@ def get_historical_features(data: pd.DataFrame):
     features = pd.DataFrame({
         'volatility': volatility,
         'avg_volume': mean_volume,
-        'price_range': avg_range,
+        'avg_price_range': avg_range,
         # 'beta': beta,
         # 'avg_return': avg_return,
         # 'momentum': ...,
