@@ -24,6 +24,9 @@ wrapt = "^1.15.0"
 ta = "^0.10.2"
 scikit-learn = "^1.2.2"
 yellowbrick = "^1.5"
+psycopg2 = "^2.9.6"
+sqlalchemy-timescaledb = "^0.4"
+sqlalchemy-utils = "^0.41.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.3"
