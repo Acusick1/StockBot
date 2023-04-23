@@ -3,9 +3,11 @@ import pandas as pd
 from backtesting import Backtest, Strategy
 from functools import partial
 from hyperopt import fmin, hp, space_eval, tpe, STATUS_OK
+from sklearn.model_selection import KFold
 from typing import Any, Optional
 from strategies import daily
 from src.db.main import DatabaseApi
+from utils import gen
 from utils.tickers import get_snp500_tickers
 from config import EXAMPLE_STOCKS
 
@@ -81,22 +83,40 @@ if __name__ == "__main__":
     #     "threshold2": hp.uniform("threshold2", -1, 1)
     # }
 
-    obj_func = partial(objective, strategy=strategy, data=data)
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    all_stats, reduced_stats = {}, {}
 
-    best = opt(
-        obj_func,
-        param_space=param_space, 
-        max_evals=10
-    )
+    i = 0
+    for train_id, test_id in kf.split(stocks):
 
-    best_params = space_eval(param_space, best)
-    print(best_params)
+        train_stocks = np.array(stocks)[train_id]
+        test_stocks = np.array(stocks)[test_id]
 
-    stats, all_bt = run(data, strategy=strategy, params=best_params)
+        obj_func = partial(objective, strategy=strategy, data=data[train_stocks])
 
-    all_stats = pd.DataFrame(stats).transpose()
+        best = opt(
+            obj_func,
+            param_space=param_space,
+            max_evals=10
+        )
 
-    print(all_stats.loc[:, ~all_stats.columns.str.startswith("_")].mean(numeric_only=False))
+        best_params = space_eval(param_space, best)
+        print(best_params)
 
+        stats, all_bt = run(data[test_stocks], strategy=strategy, params=best_params)
+        df_stats = pd.DataFrame(stats).transpose()
+        
+        all_stats[f"run{i}"] = stats
+
+        # Taking mean of numeric columns
+        reduced_stats[f"run{i}"] = df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean(numeric_only=False)
+
+        i += 1
+
+    reduced_stats = pd.concat(reduced_stats, axis=1)
+    print(reduced_stats)
+
+    all_stats = gen.multiindex_from_dict(all_stats)
+    print(all_stats)
     # for bt in all_bt.values():
     #     bt.plot()

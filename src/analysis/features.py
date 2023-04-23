@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict
 from src.db.main import DatabaseApi
+from config import settings
 
 
 def add_analysis(data: pd.DataFrame):
@@ -29,23 +30,53 @@ def add_analysis(data: pd.DataFrame):
     return data
 
 
-def format_data(data: pd.DataFrame):
+def get_historical_features(data: pd.DataFrame):
 
-    # data = data.swaplevel(0, 1, axis=1)
+    # market = get_market_history()
+    # market = market.dropna()
+    data = data.dropna()
 
-    return data
+    adj_close = data.xs("Adj Close", axis=1, level=1)
+    high = data.xs("High", axis=1, level=1)
+    low = data.xs("Low", axis=1, level=1)
+    
+
+    mean_volume = data.xs("Volume", axis=1, level=1).mean()
+    volatility = adj_close.pct_change().std()
+    avg_range = high.mean() - low.mean()
+    # avg_return = adj_close.pct_change().mean()
+    # stock_change = adj_close.pct_change()
+
+    # market_change = market.xs("Adj Close", axis=1, level=1).pct_change()
+    # cov = stock_change.cov(market_change)
+    # market_variance = market_change.std() ** 2
+    # beta = cov / market_variance
+
+    features = pd.DataFrame({
+        'volatility': volatility,
+        'avg_volume': mean_volume,
+        'avg_price_range': avg_range,
+        # 'beta': beta,
+        # 'avg_return': avg_return,
+        # 'momentum': ...,
+    })
+
+    return features
 
 
-def build(data: Dict[str, pd.DataFrame] = None):
-    """Build features function to pipeline raw data to usable data containing features etc. within models"""
+def get_market_history(ticker: str = "^GSPC", period="1y"):
 
-    # TODO: Better way to do this, preferably without reassigning data, ideally doing so in a vectorised fashion
-    # TODO: List comprehension once confident in implementation and tests built
-    for stock, df in data.items():
-        df = format_data(df)
-        data[stock] = add_analysis(df)
+    db = DatabaseApi()
+    market_history = db.request([ticker], period=period)
+    return market_history
 
-    return data
+
+def get_stock_metadata(stocks: list[str]):
+
+    metadata = pd.read_csv(settings.data_path / 'stock_metadata.csv', index_col=0)
+    features = metadata.loc[metadata.index.intersection(stocks), :]
+
+    return features
 
 
 def calculate_volatility(data: pd.Series):
@@ -80,12 +111,12 @@ def calculate_weighted_volatility(data: pd.Series, window: int, lambda_: float =
 
 def calculate_beta(stock: str, period: str = "1y", comp_stock: str = "^GSPC"):
     """
-    Calculate volatility of a stock compared to the market over a give period
+    Calculate volatility of a stock compared to the market over a given period
     """
-    api = DatabaseApi()
+    db = DatabaseApi()
     
-    stock_change = api.request([stock], period=period)["Adj Close"].pct_change()
-    market_change = api.request([comp_stock], period=period)["Adj Close"].pct_change()
+    stock_change = db.request([stock], period=period)["Adj Close"].pct_change()
+    market_change = db.request([comp_stock], period=period)["Adj Close"].pct_change()
 
     cov = stock_change.cov(market_change)
     market_variance = market_change.std() ** 2
