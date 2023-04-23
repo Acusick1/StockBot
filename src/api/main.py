@@ -64,22 +64,13 @@ class FinanceApi:
         """
 
         tickers = [request.stock] if isinstance(request.stock, str) else request.stock
-        start_date = request.start_date
-        end_date = request.end_date
         period = request.period
 
         if interval_key is None:
             interval_key = request.interval.key
-        
-        # Adding day to requested dates as yfinance seems to be a day off for day requests
-        if "d" in interval_key:
-            start_date += timedelta(days=1)
-            end_date += timedelta(days=1)
 
         output = self._download(
             tickers=tickers,
-            # start=start_date,
-            # end=end_date,
             period=period,
             interval=interval_key,
             **kwargs
