@@ -7,7 +7,7 @@ from config import settings
 DATABASE_URI = f'postgresql://{settings.db_username}:{settings.db_password}' \
     f'@{settings.db_host}:{settings.db_port}/{settings.db_name}'
 
-engine = create_engine(DATABASE_URI, echo=True)
+engine = create_engine(DATABASE_URI, echo=settings.debug)
 if not database_exists(engine.url):
     create_database(engine.url)
 

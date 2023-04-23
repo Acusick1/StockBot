@@ -27,6 +27,7 @@ yellowbrick = "^1.5"
 psycopg2 = "^2.9.6"
 sqlalchemy-timescaledb = "^0.4"
 sqlalchemy-utils = "^0.41.0"
+pandarallel = "^1.6.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.3"
