@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, model_validator, field_validator
 from typing import List, Optional, Tuple, Union
 from src.api.gen import get_base_period, get_delta_from_period, get_period_from_delta, split_period
 from utils.hdf5 import get_h5_key
@@ -21,7 +21,7 @@ class Interval(BaseModel):
     dfreq: str = "B"
     ifreq: Optional[str] = None
 
-    @validator("key")
+    @field_validator("key")
     def validate_key(cls, value):
 
         if value not in valid_intervals:
@@ -53,83 +53,77 @@ class RequestBase(BaseModel):
     stock: Union[List[str], Tuple[str]]
     interval: Optional[Interval] = Interval.from_string("1d")
     period: Optional[str] = "1y"
-    start_date: Optional[datetime]
-    end_date: Optional[datetime]
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
 
-    @validator("stock", pre=True)
+    @field_validator("stock", mode="before")
     def validate_stock(cls, value):
         if isinstance(value, str):
             value = [value]
 
         return value
 
-    @validator("interval", pre=True)
+    @field_validator("interval", mode="before")
     def validate_interval(cls, value):
         if isinstance(value, str):
             value = Interval.from_string(value)
 
         return value
 
-    @validator("start_date", "end_date", pre=True)
+    @field_validator("start_date", "end_date", mode="before")
     def validate_date(cls, value):
         if isinstance(value, str):
             value = datetime.strptime(value, settings.date_fmt)
 
         return value
 
-    @validator("period", pre=True)
+    @field_validator("period", mode="before")
     def validate_period(cls, value):
         if isinstance(value, timedelta):
             value = get_period_from_delta(value)
 
         return value
 
-    @root_validator
-    def validate(cls, values):
+    @model_validator(mode="after")
+    def validate(self):
         """
         Filling dependent arguments based on input.
         Only two of period, start_date, end_date required, the third can be derived.
         """
-        period = values.get("period", None)
-        start_date = values.get("start_date", None)
-        end_date = values.get("end_date", None)
-        interval = values.get("interval")
 
-        if period:
+        if self.period:
 
-            if period == "max":
+            if self.period == "max":
                 # Special case "max" = undefined start date
-                start_date = None
-                end_date = datetime.today()
+                self.start_date = None
+                self.end_date = datetime.today()
 
-            elif period == "ytd":
+            elif self.period == "ytd":
                 # Special case year-to-date = start from beginning of year
-                start_date = datetime.today().replace(month=1, day=1)
-                end_date = datetime.today()
+                self.start_date = datetime.today().replace(month=1, day=1)
+                self.end_date = datetime.today()
 
-            elif not start_date:
+            elif not self.start_date:
                 # If no end date provided, go with today
-                end_date = end_date if end_date else datetime.today()
-                start_date = end_date - get_delta_from_period(period)
+                self.end_date = self.end_date if self.end_date else datetime.today()
+                self.start_date = self.end_date - get_delta_from_period(self.period)
 
-            elif not end_date:
-                end_date = start_date + get_delta_from_period(period)
+            elif not self.end_date:
+                self.end_date = self.start_date + get_delta_from_period(self.period)
 
         else:
-            period = get_period_from_delta(end_date - start_date)
+            self.period = get_period_from_delta(self.end_date - self.start_date)
 
         # Start date undefined when period is max
-        if period != "max":
+        if self.period != "max":
 
-            if start_date > end_date:
+            if self.start_date > self.end_date:
                 raise ValueError("Start date is greater than end date!")
 
-            elif end_date < start_date + interval.delta:
+            elif self.end_date < self.start_date + self.interval.delta:
                 raise ValueError("End date is less than start date + one interval: \n"
-                                 f"{end_date} < {start_date} + {interval.delta}")
+                                 f"{self.end_date} < {self.start_date} + {self.interval.delta}")
 
-        values.update({"period": period, "start_date": start_date, "end_date": end_date})
-        return values
 
     def get_h5_keys(self):
         """Get key format used in h5 files: base interval (minute, daily) with stock subgroup"""

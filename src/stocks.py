@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, model_validator, field_validator
 from typing import Optional
 from src.db.main import DatabaseApi
 from src.stoploss import stop_losses
@@ -18,7 +18,7 @@ class Trade(BaseModel):
     value: Optional[float]
     type: str
 
-    @root_validator()
+    @model_validator()
     def class_validator(cls, values):
 
         if "value" in values:
@@ -32,7 +32,7 @@ class Trade(BaseModel):
 
         return values
 
-    @validator("type")
+    @field_validator("type")
     def type_validator(cls, trade_type):
         
         trade_type = trade_type.lower()

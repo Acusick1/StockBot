@@ -1,8 +1,9 @@
 from pathlib import Path
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', extra='allow')
 
     base_path: Path = Path(__file__).parent.resolve()
     data_path: Path = base_path / "data"
@@ -16,18 +17,13 @@ class Settings(BaseSettings):
     db_port: int
     db_name: str
 
-    class Config:
-        env_file = Path(__file__).parent.resolve() / ".env"
-
 
 class YahooApiSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
     api_key: str
     poll_frequency: float = 0.25
     max_stocks_per_request: int = 10
-
-    class Config:
-        env_file = Path(__file__).parent.resolve() / ".env"
 
 
 settings = Settings()

@@ -74,7 +74,7 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
     assert db_data.shape[0] == data.shape[0]
 
     # Create request that should result in new download and put call
-    next_day_request = fake_year_request.copy()
+    next_day_request = fake_year_request.model_copy()
     next_day_request.end_date += timedelta(days=1)
 
     new_data = create_fake_data(request=next_day_request)

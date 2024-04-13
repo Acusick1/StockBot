@@ -54,7 +54,7 @@ class DatabaseApi:
         """
 
         # Taking a copy since we may make changes to stocks
-        request = request.copy()
+        request = request.model_copy()
 
         base_indices = get_indices(
             request=request, calendar=self.calendar, frequency=request.get_base_interval())
@@ -113,10 +113,10 @@ class DatabaseApi:
                 if response.columns.nlevels == 1:
                     response = pd.concat({request.stock[0]: response}, axis=1)
 
-                for tick, df in response.groupby(level=0, axis=1):
+                for tick, df in response.T.groupby(level=0):
 
                     tick = str(tick)
-                    df = df.droplevel(0, axis=1)
+                    df = df.droplevel(0, axis=0).T
 
                     if tick in diff:
                         df = df.filter(items=diff[tick], axis=0)
