@@ -7,7 +7,7 @@ from typing import Optional
 from src.db.main import DatabaseApi
 
 
-class StopLoss():
+class StopLoss:
 
     def __init__(self) -> None:
         pass

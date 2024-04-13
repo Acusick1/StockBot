@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from typing import Dict
 from src.db.main import DatabaseApi
 from config import settings
 

@@ -1,4 +1,3 @@
-import numpy as np
 from datetime import timedelta
 from pandas import DataFrame, testing
 from pandas.tseries.offsets import BDay

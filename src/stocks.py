@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from pydantic import BaseModel, root_validator, validator
-from typing import Any, Optional
+from typing import Optional
 from src.db.main import DatabaseApi
 from src.stoploss import stop_losses
 from utils.gen import pct_change
@@ -66,7 +66,7 @@ def evaluate_trade(trade: Trade):
     print(f"Bought: {trade.open_stamp.date()} | {trade.open_price}")
     print(f"Latest: {latest_date.date()} | {latest_price.round(3)}")
     print(f"Change: {change.round(3)}%")
-    print(f"Stops:", json.dumps(stops, indent=4))
+    print("Stops:", json.dumps(stops, indent=4))
 
 
 if __name__ == "__main__":

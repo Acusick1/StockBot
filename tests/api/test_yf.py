@@ -1,5 +1,3 @@
-import pytest
-from config import yahoo_api_settings
 
 
 def test_single_request(yf_api, single_request):

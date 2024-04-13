@@ -9,7 +9,6 @@ from strategies import daily
 from src.db.main import DatabaseApi
 from utils import gen
 from utils.tickers import get_snp500_tickers
-from config import EXAMPLE_STOCKS
 
 
 def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]] = None, **kwargs):

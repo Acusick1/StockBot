@@ -1,14 +1,12 @@
-import numpy as np
 import pandas as pd
 from backtesting import Backtest
 from functools import partial
 from hyperopt import fmin, hp, space_eval, tpe, STATUS_OK
 from typing import Any, Optional
 from src.db.main import DatabaseApi
-from strategies.multi_indicator import MultiIndicatorStrategy, SignalIndicator, MultiSignalIndicator, Macd, MacdDeriv, MacdSignal, Threshold
-from utils.gen import flatten_dict, unflatten_dict
+from strategies.multi_indicator import MultiIndicatorStrategy, SignalIndicator, MultiSignalIndicator, MacdDeriv, Threshold
+from utils.gen import unflatten_dict
 from utils.tickers import get_snp500_tickers
-from config import EXAMPLE_STOCKS
 
 
 def run(data: pd.MultiIndex, msi: MultiSignalIndicator, params: Optional[dict[str, Any]] = None, **kwargs):

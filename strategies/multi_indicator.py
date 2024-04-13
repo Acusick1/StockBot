@@ -1,12 +1,10 @@
 import numpy as np
 import pandas as pd
 from backtesting import Backtest
-from backtesting.lib import TrailingStrategy, crossover
+from backtesting.lib import TrailingStrategy
 from backtesting.test import GOOG
 from hyperopt import hp
-from typing import Any
 from strategies.daily import macd
-from utils.gen import flatten_dict, unflatten_dict
 
 
 class Tunable:

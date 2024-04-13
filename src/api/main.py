@@ -2,7 +2,7 @@ import requests
 import json
 import pandas as pd
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime
 from time import sleep
 from typing import Union, Optional, Dict
 from src.db import schemas

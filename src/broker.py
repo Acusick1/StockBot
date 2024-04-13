@@ -2,7 +2,6 @@ import csv
 from abc import ABC, abstractmethod
 from typing import Optional
 from datetime import datetime
-from pandas.tseries.offsets import BDay
 from pathlib import Path
 from src.db.main import DatabaseApi
 from src.stocks import Trade
