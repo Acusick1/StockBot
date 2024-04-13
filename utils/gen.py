@@ -22,7 +22,6 @@ def batch(size: int, retry_items: bool = True, concat_axis: Optional[int] = None
 
     @wrapt.decorator
     def wrapper(func, instance, args, kwargs) -> list[Any]:
-        
         if args:
             input_list, args = args[0], args[1:]
         else:
@@ -30,10 +29,9 @@ def batch(size: int, retry_items: bool = True, concat_axis: Optional[int] = None
 
         results = []
         for i in range(0, len(input_list), size):
-            
             batch = input_list[i : i + size]
             result = func(batch, *args, **kwargs)
-            
+
             # Retry if no return
             if result is None and retry_items:
                 print("No return from batch, retrying items individually")
@@ -41,22 +39,27 @@ def batch(size: int, retry_items: bool = True, concat_axis: Optional[int] = None
             else:
                 results.append(result)
 
-        if isinstance(results[0], (pd.Series, pd.DataFrame)) and concat_axis is not None:
+        if (
+            isinstance(results[0], (pd.Series, pd.DataFrame))
+            and concat_axis is not None
+        ):
             results = pd.concat(results, axis=concat_axis)
 
         elif isinstance(results[0], list):
             results = [item for sublist in results for item in sublist]
 
         return results
+
     return wrapper
 
 
 def chunk(data: Iterable, size: int):
-
     return [data[i : i + size] for i in range(0, len(data), size)]
 
 
-def validate_strict_args(inp: Any, options: Union[List, Tuple], name: str, optional: bool = False) -> None:
+def validate_strict_args(
+    inp: Any, options: Union[List, Tuple], name: str, optional: bool = False
+) -> None:
     if not (inp in options or (optional and inp is None)):
         raise ValueError(f"Inputs {name}: {inp} must be one of: {options}")
 
@@ -89,7 +92,11 @@ def dataframe_from_dict(d: dict) -> pd.DataFrame:
 def multiindex_from_dict(d: dict) -> pd.MultiIndex:
     """Creating pandas DataFrame from a nested dictionary."""
 
-    reform = {(outer_key, inner_key): values for outer_key, inner_dict in d.items() for inner_key, values in inner_dict.items()}
+    reform = {
+        (outer_key, inner_key): values
+        for outer_key, inner_dict in d.items()
+        for inner_key, values in inner_dict.items()
+    }
     return pd.DataFrame(reform)
 
 

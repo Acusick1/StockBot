@@ -37,7 +37,6 @@ class SmaCross(Strategy):
 
 
 class MacdSignalCross(TrailingStrategy):
-
     macd = None
     singal = None
 
@@ -65,18 +64,19 @@ class MacdSignalCross(TrailingStrategy):
 
 
 class MacdDerivCross(TrailingStrategy):
-
     macd = None
     macd_deriv = None
     singal = None
-    threshold = 0.
+    threshold = 0.0
 
     def init(self):
         super().init()
 
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
-        self.macd_deriv, self.signal = self.I(macd_deriv_signal, self.macd, name="MACD'")
+        self.macd_deriv, self.signal = self.I(
+            macd_deriv_signal, self.macd, name="MACD'"
+        )
         self.set_trailing_sl(2)
 
     def next(self):
@@ -92,11 +92,10 @@ class MacdDerivCross(TrailingStrategy):
 
 
 class MacdGradCross(TrailingStrategy):
-
     macd = None
     macd_grad = None
     singal = None
-    threshold = 0.
+    threshold = 0.0
 
     def init(self):
         super().init()
@@ -112,19 +111,18 @@ class MacdGradCross(TrailingStrategy):
         if crossover(self.macd_grad, self.signal):
             self.position.close()
             self.buy()
-        
+
         elif crossover(self.signal, self.macd_grad):
             self.position.close()
             self.sell()
 
 
 class MacdGradDerivCross(TrailingStrategy):
-
     macd = None
     macd_grad = None
     macd_deriv = None
     signal = None
-    threshold = 0.
+    threshold = 0.0
     smooth = 0
     buy_sell = 2
 
@@ -133,36 +131,47 @@ class MacdGradDerivCross(TrailingStrategy):
 
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
-        self.macd_grad, self.macd_deriv = self.I(macd_grad_deriv, self.macd, name="MACD'", smooth=self.smooth)
-        self.signal = np.zeros(self.macd.shape) + self. threshold
+        self.macd_grad, self.macd_deriv = self.I(
+            macd_grad_deriv, self.macd, name="MACD'", smooth=self.smooth
+        )
+        self.signal = np.zeros(self.macd.shape) + self.threshold
         self.set_trailing_sl(2)
 
     def next(self):
         super().next()
 
-        if (crossover(self.macd_grad, self.signal) and self.macd_deriv[-1] >= self.threshold or
-            crossover(self.macd_deriv, self.signal) and self.macd_grad[-1] >= self.threshold):
+        if (
+            crossover(self.macd_grad, self.signal)
+            and self.macd_deriv[-1] >= self.threshold
+            or crossover(self.macd_deriv, self.signal)
+            and self.macd_grad[-1] >= self.threshold
+        ):
             self.position.close()
 
             if self.buy_sell in [0, 2]:
                 self.buy()
 
-        elif (crossover(-self.signal, self.macd_grad) and self.macd_deriv[-1] <= -self.threshold or
-            crossover(-self.signal, self.macd_deriv) and self.macd_grad[-1] <= -self.threshold):
+        elif (
+            crossover(-self.signal, self.macd_grad)
+            and self.macd_deriv[-1] <= -self.threshold
+            or crossover(-self.signal, self.macd_deriv)
+            and self.macd_grad[-1] <= -self.threshold
+        ):
             self.position.close()
-            
+
             if self.buy_sell in [1, 2]:
                 self.sell()
 
 
 class MacdGradCheat(TrailingStrategy):
     """
-    Cheating MACD gradient strategy, uses information ahead of time to calculate gradient 
+    Cheating MACD gradient strategy, uses information ahead of time to calculate gradient
     """
+
     macd = None
     macd_grad = None
     singal = None
-    threshold = 0.
+    threshold = 0.0
 
     def init(self):
         super().init()
@@ -194,22 +203,19 @@ def simple_moving_avg(values, n):
 
 
 def macd_signal(values, smooth: int = 9, **kwargs):
-
     md = macd(values, **kwargs)
     signal = md.ewm(span=smooth, adjust=False).mean()
 
     return md, signal
 
 
-def macd_deriv_signal(values, threshold: float = 0., **kwargs):
-
+def macd_deriv_signal(values, threshold: float = 0.0, **kwargs):
     md = macd_deriv(values, **kwargs)
     signal = np.zeros(md.shape) + threshold
     return md, signal
 
 
-def macd_grad_deriv(values, threshold: float = 0., smooth: int = 0, **kwargs):
-
+def macd_grad_deriv(values, threshold: float = 0.0, smooth: int = 0, **kwargs):
     md_grad = macd_grad(values, **kwargs)
     # Have to shift since gradient uses next value in calculation
     md_grad = md_grad.shift(1)
@@ -222,8 +228,7 @@ def macd_grad_deriv(values, threshold: float = 0., smooth: int = 0, **kwargs):
     return md_grad, md_deriv
 
 
-def macd_grad_signal(values, threshold: float = 0., **kwargs):
-
+def macd_grad_signal(values, threshold: float = 0.0, **kwargs):
     md = macd_grad(values, **kwargs)
     # Have to shift since gradient uses next value in calculation
     md = md.shift(1)
@@ -245,30 +250,25 @@ def macd(values, n_fast: int = 12, n_slow: int = 26):
 
 
 def smoother(func, _smooth: int = 9, *args, **kwargs):
-
     return func(*args, **kwargs).ewm(span=_smooth, adjust=False).mean()
 
 
 def macd_deriv(values, **kwargs):
-
     md = macd(values, **kwargs)
     return pd.Series(md).diff()
 
 
 def macd_grad(values, **kwargs):
-
     md = macd(values, **kwargs)
     return pd.Series(np.gradient(md))
 
 
 def threshold_signal(shape, threshold: float):
-
     return np.zeros(shape) + threshold
 
 
 if __name__ == "__main__":
-
-    bt = Backtest(GOOG, MacdSignalCross, cash=10_000, commission=.002)
+    bt = Backtest(GOOG, MacdSignalCross, cash=10_000, commission=0.002)
     stats = bt.run()
     print(stats)
     bt.plot()

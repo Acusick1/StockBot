@@ -8,7 +8,6 @@ from utils.gen import pct_change
 
 
 class Trade(BaseModel):
-    
     ticker: str
     open_stamp: Optional[datetime]
     close_stamp: Optional[datetime]
@@ -20,10 +19,9 @@ class Trade(BaseModel):
 
     @model_validator()
     def class_validator(cls, values):
-
         if "value" in values:
             values["quantity"] = values["value"] / values["open_price"]
-        
+
         elif "quantity" in values:
             values["value"] = values["open_price"] * values["quantity"]
 
@@ -34,7 +32,6 @@ class Trade(BaseModel):
 
     @field_validator("type")
     def type_validator(cls, trade_type):
-        
         trade_type = trade_type.lower()
 
         if trade_type != "buy" and trade_type != "sell":
@@ -44,7 +41,6 @@ class Trade(BaseModel):
 
 
 def evaluate_trade(trade: Trade):
-
     db = DatabaseApi()
 
     # TODO: Better way of defining how much to look back
@@ -58,8 +54,7 @@ def evaluate_trade(trade: Trade):
     change = pct_change([trade.open_price, latest_price])
 
     stops = {
-        key: loss.calculate(
-            data, bought_on=trade.open_stamp).iloc[-1].round(3)
+        key: loss.calculate(data, bought_on=trade.open_stamp).iloc[-1].round(3)
         for key, loss in stop_losses.items()
     }
 
@@ -70,9 +65,11 @@ def evaluate_trade(trade: Trade):
 
 
 if __name__ == "__main__":
-
     from utils.market import get_market_tz
+
     d = get_market_tz().localize(datetime(2023, 2, 6))
 
-    trade = Trade(ticker="AMZN", open_stamp=d, open_price=102., value=200., type="buy")
+    trade = Trade(
+        ticker="AMZN", open_stamp=d, open_price=102.0, value=200.0, type="buy"
+    )
     evaluate_trade(trade)

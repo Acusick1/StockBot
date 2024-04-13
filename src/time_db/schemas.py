@@ -3,12 +3,10 @@ from pydantic import BaseModel
 
 
 class StockBase(BaseModel):
-
     ticker: str
 
 
 class DailyBase(BaseModel):
-
     stock_id: str
     timestamp: datetime
     open: float

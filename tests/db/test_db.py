@@ -7,7 +7,6 @@ from src.db.main import create_fake_data
 
 @patch("yfinance.download")
 def test_get_data(yfd, database_api, fake_year_request):
-
     data = create_fake_data(request=fake_year_request)
     yfd.return_value = data
 
@@ -16,7 +15,6 @@ def test_get_data(yfd, database_api, fake_year_request):
 
 
 def test_get_db_data(database_api, fake_year_request):
-
     key = fake_year_request.get_h5_keys()[0]
     put_data = create_fake_data(request=fake_year_request)
     database_api.store.put(key, put_data, format="table")
@@ -29,7 +27,7 @@ def test_get_db_data(database_api, fake_year_request):
     pull_data = database_api.get_db_data(
         key,
         start_date=fake_year_request.start_date,
-        end_date=fake_year_request.end_date
+        end_date=fake_year_request.end_date,
     )
 
     testing.assert_frame_equal(put_data, pull_data)
@@ -44,20 +42,24 @@ def test_get_db_data(database_api, fake_year_request):
     pull_data = database_api.get_db_data(key, end_date=end_date_delta)
     assert pull_data.index[-1].date() == end_date_delta.date()
 
-    pull_data = database_api.get_db_data(key, start_date=start_date_delta, end_date=end_date_delta)
+    pull_data = database_api.get_db_data(
+        key, start_date=start_date_delta, end_date=end_date_delta
+    )
     assert pull_data.index[0].date() == start_date_delta.date()
     assert pull_data.index[-1].date() == end_date_delta.date()
 
 
 # TODO: Split into two tests
 @patch("yfinance.download")
-def test_similar_requests(yfd, database_api, fake_year_request, fake_month_request, mocker):
-
+def test_similar_requests(
+    yfd, database_api, fake_year_request, fake_month_request, mocker
+):
     h5_key = fake_year_request.get_h5_keys()[0]
     data = create_fake_data(request=fake_year_request)
     yfd.return_value = data
 
     import src.db.main
+
     h5_put = mocker.spy(src.db.main.pd.HDFStore, "put")
 
     # Two of the same calls, first should request new data, second should pull existing data
@@ -91,10 +93,9 @@ def test_similar_requests(yfd, database_api, fake_year_request, fake_month_reque
 
 @patch("yfinance.download")
 def test_missing_rows(yfd, database_api, fake_month_request):
-
     h5_key = fake_month_request.get_h5_keys()[0]
     data = create_fake_data(request=fake_month_request)
-    
+
     missing_rows_data = data.drop(index=data.index[-5:])
     yfd.return_value = missing_rows_data
 
@@ -110,9 +111,8 @@ def test_missing_rows(yfd, database_api, fake_month_request):
 
 @patch("yfinance.download")
 def test_nan_overwrite(yfd, database_api, fake_month_request):
-    
     data = create_fake_data(request=fake_month_request)
-    
+
     missing_rows_data = data.drop(index=data.index[-5:])
     yfd.return_value = missing_rows_data
 

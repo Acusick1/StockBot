@@ -10,36 +10,31 @@ last_bday = datetime.today() - BDay(1)
 
 @pytest.fixture(scope="session")
 def yf_api():
-
     yield FinanceApi()
 
 
 @pytest.fixture(scope="session")
 def yahoo_api():
-
     yield YahooApi()
 
 
 @pytest.fixture(scope="session")
 def yahoo_request():
-
     yield {
         "endpoint": "https://yfapi.net/v8/finance/spark",
         "params": {
             "symbols": ",".join(EXAMPLE_STOCKS),
             "period": "1mo",
-            "interval": "1d"
-        }
+            "interval": "1d",
+        },
     }
 
 
 @pytest.fixture(scope="session")
 def single_request():
-
     yield schemas.RequestBase(stock="AAPL", period="1y")
 
 
 @pytest.fixture(scope="session")
 def multi_request():
-
     return schemas.RequestBase(stock=("AAPL", "MSFT"), period="1y")

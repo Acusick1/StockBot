@@ -14,10 +14,9 @@ api = FinanceApi()
 
 
 def plot_stock(data: pd.DataFrame):
-
     def format_date(x, pos=None):
         thisind = np.clip(int(x + 0.5), 0, nums - 1)
-        return df.index[thisind].strftime('%Y-%m-%d %H:%M')
+        return df.index[thisind].strftime("%Y-%m-%d %H:%M")
 
     subplot_shape = get_subplot_shape(len(data.columns.unique(0)))
 
@@ -30,7 +29,6 @@ def plot_stock(data: pd.DataFrame):
 
     i = 0
     for stock, df in data.groupby(level=0, axis=1):
-
         df = df.droplevel(0, axis=1)
         nums = np.arange(df.shape[0])
         plt.sca(ax[i])
@@ -44,18 +42,16 @@ def plot_stock(data: pd.DataFrame):
 
 
 def main():
-    st.multiselect("Ticker",
-                   options=EXAMPLE_STOCKS,
-                   key="ticker_picker")
+    st.multiselect("Ticker", options=EXAMPLE_STOCKS, key="ticker_picker")
 
-    st.select_slider("Period",
-                     options=valid_periods,
-                     key="period_picker")
+    st.select_slider("Period", options=valid_periods, key="period_picker")
 
-    st.select_slider("Interval",
-                     options=valid_intervals,
-                     value=valid_intervals[0],
-                     key="interval_picker")
+    st.select_slider(
+        "Interval",
+        options=valid_intervals,
+        value=valid_intervals[0],
+        key="interval_picker",
+    )
 
     database = DatabaseApi(api=api)
 
@@ -66,9 +62,13 @@ def main():
     valid_times = pd.unique([*valid_intervals, *valid_periods])
 
     if np.where(valid_times == interval) < np.where(valid_times == period):
-
         if tickers:
-            request = RequestBase(stock=tickers, period=period, interval=interval, end_date=datetime.today())
+            request = RequestBase(
+                stock=tickers,
+                period=period,
+                interval=interval,
+                end_date=datetime.today(),
+            )
             df = database.get_data(request)
 
             if df is not None:
@@ -79,5 +79,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()

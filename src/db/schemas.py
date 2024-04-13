@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta
 from pydantic import BaseModel, model_validator, field_validator
 from typing import List, Optional, Tuple, Union
-from src.api.gen import get_base_period, get_delta_from_period, get_period_from_delta, split_period
+from src.api.gen import (
+    get_base_period,
+    get_delta_from_period,
+    get_period_from_delta,
+    split_period,
+)
 from utils.hdf5 import get_h5_key
 from config import settings
 
@@ -15,7 +20,6 @@ valid_periods = ("1d", "5d", "1mo", "3mo", "6mo", "1y", "ytd", "2y", "5y", "10y"
 
 
 class Interval(BaseModel):
-
     key: str
     delta: timedelta
     dfreq: str = "B"
@@ -23,7 +27,6 @@ class Interval(BaseModel):
 
     @field_validator("key")
     def validate_key(cls, value):
-
         if value not in valid_intervals:
             raise ValueError(f"Interval key must be one of: {valid_intervals}")
 
@@ -31,25 +34,29 @@ class Interval(BaseModel):
 
     @staticmethod
     def from_string(interval: str):
-
         num, unit = split_period(interval)
 
         if unit == "m":
             return Interval(key=interval, delta=timedelta(minutes=num), ifreq=f"{num}T")
         elif unit == "h":
-            return Interval(key=interval, delta=timedelta(hours=num), ifreq=f"{num * 60}T")
+            return Interval(
+                key=interval, delta=timedelta(hours=num), ifreq=f"{num * 60}T"
+            )
         elif unit == "d":
             return Interval(key=interval, delta=timedelta(days=num), dfreq=f"{num}B")
         elif unit == "mo":
-            return Interval(key=interval, delta=timedelta(days=num*30), dfreq=f"{num}M")
+            return Interval(
+                key=interval, delta=timedelta(days=num * 30), dfreq=f"{num}M"
+            )
         elif unit == "y":
-            return Interval(key=interval, delta=timedelta(days=365), dfreq=f"{num * 12}M")
+            return Interval(
+                key=interval, delta=timedelta(days=365), dfreq=f"{num * 12}M"
+            )
         else:
             raise ValueError(f"No valid time unit found in: {interval}")
 
 
 class RequestBase(BaseModel):
-
     stock: Union[List[str], Tuple[str]]
     interval: Optional[Interval] = Interval.from_string("1d")
     period: Optional[str] = "1y"
@@ -92,7 +99,6 @@ class RequestBase(BaseModel):
         """
 
         if self.period:
-
             if self.period == "max":
                 # Special case "max" = undefined start date
                 self.start_date = None
@@ -116,14 +122,14 @@ class RequestBase(BaseModel):
 
         # Start date undefined when period is max
         if self.period != "max":
-
             if self.start_date > self.end_date:
                 raise ValueError("Start date is greater than end date!")
 
             elif self.end_date < self.start_date + self.interval.delta:
-                raise ValueError("End date is less than start date + one interval: \n"
-                                 f"{self.end_date} < {self.start_date} + {self.interval.delta}")
-
+                raise ValueError(
+                    "End date is less than start date + one interval: \n"
+                    f"{self.end_date} < {self.start_date} + {self.interval.delta}"
+                )
 
     def get_h5_keys(self):
         """Get key format used in h5 files: base interval (minute, daily) with stock subgroup"""
@@ -137,11 +143,9 @@ class RequestBase(BaseModel):
         return "1" + base_period[0]
 
     def get_h5_key(self, stock: str):
-
         base_period = get_base_period(self.interval.key)
         return get_h5_key(base_period, stock)
 
 
 if __name__ == "__main__":
-
     pass

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', extra='allow')
+    model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
     base_path: Path = Path(__file__).parent.resolve()
     data_path: Path = base_path / "data"
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
 
 class YahooApiSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     api_key: str
     poll_frequency: float = 0.25
@@ -29,4 +29,19 @@ class YahooApiSettings(BaseSettings):
 settings = Settings()
 yahoo_api_settings = YahooApiSettings()
 
-EXAMPLE_STOCKS = ['AAPL', 'F', 'MSFT', 'AMD', 'GOOG', 'AMZN', 'META', 'TSLA', 'NVDA', 'V', 'TSM', 'XOM', 'PG', 'JNJ']
+EXAMPLE_STOCKS = [
+    "AAPL",
+    "F",
+    "MSFT",
+    "AMD",
+    "GOOG",
+    "AMZN",
+    "META",
+    "TSLA",
+    "NVDA",
+    "V",
+    "TSM",
+    "XOM",
+    "PG",
+    "JNJ",
+]

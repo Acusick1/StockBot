@@ -3,7 +3,6 @@ from dateutil.relativedelta import relativedelta
 
 
 def get_delta_from_period(period: str):
-
     num, unit = split_period(period)
 
     if unit == "m":
@@ -27,11 +26,9 @@ def get_delta_from_period(period: str):
 
 
 def get_period_from_delta(delta: timedelta):
-
     days = delta.days
 
     if days > 0:
-
         years = days // 365
         months = days // 28
 
@@ -48,7 +45,7 @@ def split_period(period: str):
     Split period string into number and unit (e.g. 30m > (30, m), 5y > (5, y))
     """
     period = period.replace(" ", "")
-    unit = period.lstrip('0123456789')
+    unit = period.lstrip("0123456789")
     num = period.rstrip(unit)
 
     return int(num), unit

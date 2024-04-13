@@ -11,18 +11,21 @@ from utils import gen
 from utils.tickers import get_snp500_tickers
 
 
-def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]] = None, **kwargs):
-
+def run(
+    data: pd.MultiIndex,
+    strategy: Strategy,
+    params: Optional[dict[str, Any]] = None,
+    **kwargs,
+):
     if params is not None:
         _ = strategy._check_params(strategy, params)
 
     out, all_bt = {}, {}
     for stock, df in data.groupby(level=0, axis=1):
-
         df = df.droplevel(0, axis=1)
         df["Close"] = df["Adj Close"]
         df = df.dropna()
-        bt = Backtest(df, strategy, cash=1000, commission=.002)
+        bt = Backtest(df, strategy, cash=1000, commission=0.002)
 
         out[stock] = bt.run(**kwargs)
         all_bt[stock] = bt
@@ -31,12 +34,10 @@ def run(data: pd.MultiIndex, strategy: Strategy, params: Optional[dict[str, Any]
 
 
 def opt(obj_func, param_space: dict[str, Any], **kwargs):
-
     return fmin(obj_func, param_space, algo=tpe.suggest, **kwargs)
 
 
 def objective(params, strategy, data):
-
     _ = strategy._check_params(strategy, params)
     stats, _ = run(data=data, strategy=strategy)
     stats = pd.DataFrame(stats).transpose()
@@ -52,7 +53,6 @@ def objective(params, strategy, data):
 
 
 if __name__ == "__main__":
-
     api = DatabaseApi()
     # stocks = EXAMPLE_STOCKS
     stocks = get_snp500_tickers()[:50]
@@ -87,28 +87,25 @@ if __name__ == "__main__":
 
     i = 0
     for train_id, test_id in kf.split(stocks):
-
         train_stocks = np.array(stocks)[train_id]
         test_stocks = np.array(stocks)[test_id]
 
         obj_func = partial(objective, strategy=strategy, data=data[train_stocks])
 
-        best = opt(
-            obj_func,
-            param_space=param_space,
-            max_evals=10
-        )
+        best = opt(obj_func, param_space=param_space, max_evals=10)
 
         best_params = space_eval(param_space, best)
         print(best_params)
 
         stats, all_bt = run(data[test_stocks], strategy=strategy, params=best_params)
         df_stats = pd.DataFrame(stats).transpose()
-        
+
         all_stats[f"run{i}"] = stats
 
         # Taking mean of numeric columns
-        reduced_stats[f"run{i}"] = df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean(numeric_only=False)
+        reduced_stats[f"run{i}"] = df_stats.loc[
+            :, ~df_stats.columns.str.startswith("_")
+        ].mean(numeric_only=False)
 
         i += 1
 

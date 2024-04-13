@@ -13,7 +13,7 @@ class Stock(Base):
 
 class Daily(Base):
     __tablename__ = "daily"
-    
+
     stock_id = sql.Column(sql.ForeignKey("stock.ticker", ondelete="CASCADE"))
     timestamp = sql.Column(sql.DateTime(timezone=True), nullable=False)
     open = sql.Column(sql.Float)
@@ -23,27 +23,30 @@ class Daily(Base):
     adj_close = sql.Column(sql.Float)
     volume = sql.Column(sql.Integer)
     stock = relationship("Stock", back_populates="daily")
-    
-    __table_args__ = (
-        sql.UniqueConstraint('stock_id', 'timestamp'),
-    )
-    __mapper_args__ = {
-        "primary_key": [timestamp, stock_id]
-    }
+
+    __table_args__ = (sql.UniqueConstraint("stock_id", "timestamp"),)
+    __mapper_args__ = {"primary_key": [timestamp, stock_id]}
 
 
 def recreate_tables(force: bool = False):
-    
     if not force:
-        confirm = input('Are you sure you want to drop and recreate the tables? (y/n): ')
+        confirm = input(
+            "Are you sure you want to drop and recreate the tables? (y/n): "
+        )
     else:
-        confirm = 'y'
+        confirm = "y"
 
-    if confirm.lower() == 'y':
+    if confirm.lower() == "y":
         Base.metadata.drop_all(engine, checkfirst=True)
         Base.metadata.create_all(engine)
         with Session(engine) as session:
-            session.execute(text("SELECT create_hypertable('{table}', 'timestamp');".format(table=Daily.__tablename__)))
+            session.execute(
+                text(
+                    "SELECT create_hypertable('{table}', 'timestamp');".format(
+                        table=Daily.__tablename__
+                    )
+                )
+            )
             session.commit()
 
 

@@ -11,7 +11,7 @@ class Tunable:
     def __init__(self, **params):
         self.params = self.get_default_params()
         self.set_params(**params)
-    
+
     def set_params(self, **params):
         self.params.update(params)
 
@@ -20,11 +20,11 @@ class Tunable:
             return self.get_param_space() or None
         else:
             return self.params.copy()
-    
+
     @staticmethod
     def get_default_params():
         return {}
-    
+
     @staticmethod
     def get_param_space():
         return {}
@@ -47,7 +47,7 @@ class Signal(Tunable):
 
 
 class Threshold(Signal):
-    def __init__(self, scale: float = 1, value: float = 0.):
+    def __init__(self, scale: float = 1, value: float = 0.0):
         super().__init__(value=value)
         self.scale = scale
 
@@ -55,12 +55,10 @@ class Threshold(Signal):
         return pd.Series(np.zeros(data.shape) + (self.scale * self.params["value"]))
 
     def get_param_space(self):
-        return {
-            "value": hp.uniform("value", -0.05, 0.05)
-        }
+        return {"value": hp.uniform("value", -0.05, 0.05)}
+
 
 class Macd(Indicator):
-
     def __init__(self, n_fast: int = 12, n_slow: int = 26):
         super().__init__(n_fast=n_fast, n_slow=n_slow)
 
@@ -70,10 +68,9 @@ class Macd(Indicator):
         macd = emafast - emaslow
 
         return macd
-    
+
 
 class MacdSignal(Signal):
-
     def __init__(self, smooth: int = 9):
         super().__init__(smooth=smooth)
 
@@ -84,13 +81,14 @@ class MacdSignal(Signal):
 
 
 class MacdDeriv(Indicator):
-
     def __init__(self, n_fast: int = 12, n_slow: int = 26, smooth: int = 9):
         super().__init__(n_fast=n_fast, n_slow=n_slow, smooth=smooth)
 
     def __call__(self, data: pd.Series) -> pd.Series:
-        md = macd(data, n_fast=self.params["n_fast"], n_slow=self.params["n_slow"]).diff()
-        
+        md = macd(
+            data, n_fast=self.params["n_fast"], n_slow=self.params["n_slow"]
+        ).diff()
+
         if self.params["smooth"]:
             md = md.ewm(span=self.params["smooth"]).mean()
 
@@ -108,20 +106,26 @@ class SignalIndicator:
         ind = self.indicator(data)
         signal = self.signal(ind)
         return ind, signal
-    
+
     def set_params(self, **kwargs):
-        if self.indicator_param_key in kwargs and kwargs[self.indicator_param_key] is not None:
+        if (
+            self.indicator_param_key in kwargs
+            and kwargs[self.indicator_param_key] is not None
+        ):
             self.indicator.set_params(**kwargs[self.indicator_param_key])
 
-        if self.signal_param_key in kwargs and kwargs[self.signal_param_key] is not None:
+        if (
+            self.signal_param_key in kwargs
+            and kwargs[self.signal_param_key] is not None
+        ):
             self.signal.set_params(**kwargs[self.signal_param_key])
-    
+
     def get_params(self, hyper=False):
         return {
             self.indicator_param_key: self.indicator.get_params(hyper),
-            self.signal_param_key: self.signal.get_params(hyper)
+            self.signal_param_key: self.signal.get_params(hyper),
         }
-    
+
 
 class MultiSignalIndicator:
     def __init__(self, signal_indicators: list[SignalIndicator]) -> None:
@@ -129,17 +133,18 @@ class MultiSignalIndicator:
         self.param_keys = [f"si{i}" for i in range(len(signal_indicators))]
 
     def set_params(self, **params):
-        
         for k, v in zip(self.param_keys, self.signal_indicators):
             if k in params:
                 v.set_params(**params[k])
 
     def get_params(self, hyper=False):
-        return {k: v.get_params(hyper) for k, v in zip(self.param_keys, self.signal_indicators)}
+        return {
+            k: v.get_params(hyper)
+            for k, v in zip(self.param_keys, self.signal_indicators)
+        }
 
 
 class MultiIndicatorStrategy(TrailingStrategy):
-
     msi: MultiSignalIndicator = None
 
     def init(self):
@@ -149,7 +154,6 @@ class MultiIndicatorStrategy(TrailingStrategy):
         self.indicators = []
         self.signals = []
         for si in self.msi.signal_indicators:
-            
             # Wrapping in an indicator to reveal one at a time and plot
             i, s = self.I(si, self.data.Close)
             self.indicators.append(i)
@@ -164,22 +168,18 @@ class MultiIndicatorStrategy(TrailingStrategy):
 
         # Look for all above, plus one just above (previously below)
         if all(signals > 0) and not all(self.prev_signals > 0):
-
             self.position.close()
             self.buy()
 
         elif all(signals < 0) and not all(self.prev_signals < 0):
-            
             self.position.close()
             self.sell()
 
         self.prev_signals = signals
 
     def get_signals(self):
-
         signals = []
         for i, s in zip(self.indicators, self.signals):
-            
             # TODO: Only for threshold signals
             if i > s:
                 signals.append(1)
@@ -192,7 +192,6 @@ class MultiIndicatorStrategy(TrailingStrategy):
 
 
 if __name__ == "__main__":
-
     from pprint import pprint
 
     indicator1 = Macd()
@@ -203,7 +202,7 @@ if __name__ == "__main__":
 
     si = [
         SignalIndicator(indicator=indicator1, signal=signal1),
-        SignalIndicator(indicator=indicator2, signal=signal2)
+        SignalIndicator(indicator=indicator2, signal=signal2),
     ]
 
     params = si.get_params()
@@ -214,5 +213,5 @@ if __name__ == "__main__":
 
     si = MultiSignalIndicator(signal_indicators=si)
 
-    bt = Backtest(GOOG, MultiIndicatorStrategy, cash=10_000, commission=.002)
+    bt = Backtest(GOOG, MultiIndicatorStrategy, cash=10_000, commission=0.002)
     stats = bt.run(msi=si)

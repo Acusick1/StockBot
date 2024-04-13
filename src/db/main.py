@@ -12,18 +12,28 @@ from config import settings
 
 
 class DatabaseApi:
-
-    def __init__(self,
-                 api: Optional[FinanceApi] = None,
-                 market: str = "NYSE",
-                 store_path: Path = settings.stock_history_file):
-
+    def __init__(
+        self,
+        api: Optional[FinanceApi] = None,
+        market: str = "NYSE",
+        store_path: Path = settings.stock_history_file,
+    ):
         self.api = api if api else FinanceApi()
         self.market = market
         self.calendar = mcal.get_calendar(market)
         self.store = pd.HDFStore(str(store_path))
 
-    def request(self, stock: list[str], interval="1d", period="1y", start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, flat: bool = False, *args, **kwargs):
+    def request(
+        self,
+        stock: list[str],
+        interval="1d",
+        period="1y",
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        flat: bool = False,
+        *args,
+        **kwargs,
+    ):
         """
         Wrapper around request creation and get_data to avoid making request pre-api call.
 
@@ -31,8 +41,13 @@ class DatabaseApi:
         Args and kwargs pass onto get_data.
         """
 
-        req = schemas.RequestBase(stock=stock, interval=interval,
-                                  period=period, start_date=start_date, end_date=end_date)
+        req = schemas.RequestBase(
+            stock=stock,
+            interval=interval,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
         data = self.get_data(req, *args, **kwargs)
 
         if len(stock) == 1 and flat:
@@ -40,7 +55,12 @@ class DatabaseApi:
 
         return data
 
-    def get_data(self, request: schemas.RequestBase, request_nan: bool = False, force: bool = False):
+    def get_data(
+        self,
+        request: schemas.RequestBase,
+        request_nan: bool = False,
+        force: bool = False,
+    ):
         """
         Get data from an input request. Will first query internal database, if data is missing it will make an API call.
 
@@ -57,7 +77,10 @@ class DatabaseApi:
         request = request.model_copy()
 
         base_indices = get_indices(
-            request=request, calendar=self.calendar, frequency=request.get_base_interval())
+            request=request,
+            calendar=self.calendar,
+            frequency=request.get_base_interval(),
+        )
 
         data = {}
         diff = {}
@@ -68,10 +91,10 @@ class DatabaseApi:
             end_date = request.end_date + timedelta(days=1)
 
             for tick in request.stock:
-
                 key = request.get_h5_key(tick)
                 db_data = self.get_db_data(
-                    key, start_date=start_date, end_date=end_date)
+                    key, start_date=start_date, end_date=end_date
+                )
 
                 if db_data is None or not db_data.shape[0]:
                     diff[tick] = base_indices
@@ -97,10 +120,8 @@ class DatabaseApi:
         request.stock = list(set(request.stock) - set(data.keys()))
 
         if request.stock:
-
             response = self.api.make_request(
-                request,
-                interval_key=request.get_base_interval()
+                request, interval_key=request.get_base_interval()
             )
 
             # Ensure all rows are present.
@@ -108,26 +129,24 @@ class DatabaseApi:
             response = response.reindex(base_indices)
 
             if response.shape[0]:
-
                 # Make multi-index
                 if response.columns.nlevels == 1:
                     response = pd.concat({request.stock[0]: response}, axis=1)
 
                 for tick, df in response.T.groupby(level=0):
-
                     tick = str(tick)
                     df = df.droplevel(0, axis=0).T
 
                     if tick in diff:
                         df = df.filter(items=diff[tick], axis=0)
-                    
+
                     # Joining, keeping fresh data, and sorting
                     # Reading, merging and overwriting stored data here may take a while, but appending can be error prone.
                     #   At least this way the duplicates and sorting is done immediately.
                     key = request.get_h5_key(tick)
                     if key in self.store.keys():
                         df = pd.concat([self.store.get(key), df])
-                    
+
                     df = df[~df.index.duplicated(keep="last")]
                     df = df.sort_index()
 
@@ -140,7 +159,9 @@ class DatabaseApi:
 
         return mi
 
-    def get_db_data(self, key, start_date=None, end_date=None) -> Optional[pd.DataFrame]:
+    def get_db_data(
+        self, key, start_date=None, end_date=None
+    ) -> Optional[pd.DataFrame]:
         """
         Filter store data by key and optional start/end dates
         NOTE: Currently assumes full days only, inclusive of start/end dates
@@ -158,11 +179,10 @@ class DatabaseApi:
             end_date = end_date.replace(hour=0, minute=0)
             where.append("index<=end_date")
 
-        db_data = pd.DataFrame(self.store.select(
-            key, where=where)).sort_index()
+        db_data = pd.DataFrame(self.store.select(key, where=where)).sort_index()
 
         return db_data
-    
+
     def update_daily(self, tickers: Optional[list[str]] = None, *args, **kwargs):
         """
         Update database based on tickers currently in database (default) or input tickers
@@ -178,32 +198,32 @@ class DatabaseApi:
 
         chunked_tickers = chunk(tickers, size=self.api.max_stocks_per_request)
         for group in chunked_tickers:
-
             req = schemas.RequestBase(stock=group)
             _ = self.get_data(req, *args, **kwargs)
 
     def get_stored_tickers(self, group: str = "daily"):
-
         tickers = [k.split("/")[-1] for k in self.store.keys() if group in k]
         return tickers
 
     def __del__(self):
-
         self.store.close()
 
 
-def get_indices(request: schemas.RequestBase, calendar, frequency: Optional[str] = None):
-
+def get_indices(
+    request: schemas.RequestBase, calendar, frequency: Optional[str] = None
+):
     if frequency is None:
         frequency = request.interval.key
 
     if frequency.endswith("m"):
         schedule = calendar.schedule(
-            start_date=request.start_date, end_date=request.end_date, tz=calendar.tz)
+            start_date=request.start_date, end_date=request.end_date, tz=calendar.tz
+        )
         indices = mcal.date_range(schedule, frequency=frequency)
     else:
         schedule = calendar.schedule(
-            start_date=request.start_date, end_date=request.end_date, tz=None)
+            start_date=request.start_date, end_date=request.end_date, tz=None
+        )
         indices = schedule.index.tz_localize(calendar.tz)
 
     return indices
@@ -223,10 +243,13 @@ def update_data_file(h5_file: pd.HDFStore, key: str, interval="1d"):
 
     # Difference between today's date and first date to download must be greater than the interval of collected data,
     # and at least one day as API does not provide live data.
-    if (now - start).total_seconds() > max(data_interval, timedelta(days=1).total_seconds()):
+    if (now - start).total_seconds() > max(
+        data_interval, timedelta(days=1).total_seconds()
+    ):
         download_key = h5_key_elements(key, index=-1)
         request = schemas.RequestBase(
-            stock=download_key, start_date=start, end_date=now, interval=interval)
+            stock=download_key, start_date=start, end_date=now, interval=interval
+        )
         api.get_data(request=request)
 
 
@@ -235,9 +258,7 @@ def clean_data():
     Cleaning every dataset by sorting indices and dropping duplicates
     """
     with pd.HDFStore(settings.stock_history_file) as h5:
-
         for key in h5.keys():
-
             df = pd.DataFrame(h5.get(key))
             df = df.drop_duplicates().sort_index()
 
@@ -245,7 +266,6 @@ def clean_data():
 
 
 def create_fake_data(request: schemas.RequestBase, market: str = "NYSE"):
-
     calendar = mcal.get_calendar(market)
     index = get_indices(request=request, calendar=calendar)
 
