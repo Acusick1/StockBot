@@ -1,4 +1,5 @@
 from datetime import timedelta
+
 from dateutil.relativedelta import relativedelta
 
 
@@ -34,10 +35,10 @@ def get_period_from_delta(delta: timedelta):
 
         if years:
             return f"{years}y"
-        elif months:
+        elif months:  # noqa: RET505
             return f"{months}mo"
-        else:
-            return f"{days}d"
+        return f"{days}d"
+    return None
 
 
 def split_period(period: str):
@@ -62,5 +63,6 @@ def get_base_period(period: str):
 
     if unit in ["m", "h"]:
         return "minute"
-    elif unit in ["d", "mo", "y"]:
+    elif unit in ["d", "mo", "y"]:  # noqa: RET505
         return "daily"
+    return None

@@ -4,6 +4,7 @@ from backtesting import Backtest
 from backtesting.lib import TrailingStrategy
 from backtesting.test import GOOG
 from hyperopt import hp
+
 from strategies.daily import macd
 
 
@@ -18,8 +19,7 @@ class Tunable:
     def get_params(self, hyper=False):
         if hyper:
             return self.get_param_space() or None
-        else:
-            return self.params.copy()
+        return self.params.copy()
 
     @staticmethod
     def get_default_params():
@@ -65,9 +65,7 @@ class Macd(Indicator):
     def __call__(self, data: pd.Series):
         emaslow = pd.Series(data).ewm(span=self.params["n_slow"], adjust=False).mean()
         emafast = pd.Series(data).ewm(span=self.params["n_fast"], adjust=False).mean()
-        macd = emafast - emaslow
-
-        return macd
+        return emafast - emaslow
 
 
 class MacdSignal(Signal):
@@ -75,9 +73,7 @@ class MacdSignal(Signal):
         super().__init__(smooth=smooth)
 
     def __call__(self, macd: pd.Series) -> pd.Series:
-        signal = macd.ewm(span=self.params["smooth"], adjust=False).mean()
-
-        return signal
+        return macd.ewm(span=self.params["smooth"], adjust=False).mean()
 
 
 class MacdDeriv(Indicator):
@@ -85,9 +81,7 @@ class MacdDeriv(Indicator):
         super().__init__(n_fast=n_fast, n_slow=n_slow, smooth=smooth)
 
     def __call__(self, data: pd.Series) -> pd.Series:
-        md = macd(
-            data, n_fast=self.params["n_fast"], n_slow=self.params["n_slow"]
-        ).diff()
+        md = macd(data, n_fast=self.params["n_fast"], n_slow=self.params["n_slow"]).diff()
 
         if self.params["smooth"]:
             md = md.ewm(span=self.params["smooth"]).mean()
@@ -108,16 +102,10 @@ class SignalIndicator:
         return ind, signal
 
     def set_params(self, **kwargs):
-        if (
-            self.indicator_param_key in kwargs
-            and kwargs[self.indicator_param_key] is not None
-        ):
+        if self.indicator_param_key in kwargs and kwargs[self.indicator_param_key] is not None:
             self.indicator.set_params(**kwargs[self.indicator_param_key])
 
-        if (
-            self.signal_param_key in kwargs
-            and kwargs[self.signal_param_key] is not None
-        ):
+        if self.signal_param_key in kwargs and kwargs[self.signal_param_key] is not None:
             self.signal.set_params(**kwargs[self.signal_param_key])
 
     def get_params(self, hyper=False):
@@ -133,15 +121,12 @@ class MultiSignalIndicator:
         self.param_keys = [f"si{i}" for i in range(len(signal_indicators))]
 
     def set_params(self, **params):
-        for k, v in zip(self.param_keys, self.signal_indicators):
+        for k, v in zip(self.param_keys, self.signal_indicators, strict=True):
             if k in params:
                 v.set_params(**params[k])
 
     def get_params(self, hyper=False):
-        return {
-            k: v.get_params(hyper)
-            for k, v in zip(self.param_keys, self.signal_indicators)
-        }
+        return {k: v.get_params(hyper) for k, v in zip(self.param_keys, self.signal_indicators, strict=True)}
 
 
 class MultiIndicatorStrategy(TrailingStrategy):
@@ -179,7 +164,7 @@ class MultiIndicatorStrategy(TrailingStrategy):
 
     def get_signals(self):
         signals = []
-        for i, s in zip(self.indicators, self.signals):
+        for i, s in zip(self.indicators, self.signals, strict=True):
             # TODO: Only for threshold signals
             if i > s:
                 signals.append(1)

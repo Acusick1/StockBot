@@ -1,6 +1,7 @@
 import sqlalchemy as sql
 from sqlalchemy import text
 from sqlalchemy.orm import Session, relationship
+
 from src.time_db.database import Base, engine
 
 
@@ -30,9 +31,7 @@ class Daily(Base):
 
 def recreate_tables(force: bool = False):
     if not force:
-        confirm = input(
-            "Are you sure you want to drop and recreate the tables? (y/n): "
-        )
+        confirm = input("Are you sure you want to drop and recreate the tables? (y/n): ")
     else:
         confirm = "y"
 
@@ -40,13 +39,7 @@ def recreate_tables(force: bool = False):
         Base.metadata.drop_all(engine, checkfirst=True)
         Base.metadata.create_all(engine)
         with Session(engine) as session:
-            session.execute(
-                text(
-                    "SELECT create_hypertable('{table}', 'timestamp');".format(
-                        table=Daily.__tablename__
-                    )
-                )
-            )
+            session.execute(text(f"SELECT create_hypertable('{Daily.__tablename__}', 'timestamp');"))
             session.commit()
 
 

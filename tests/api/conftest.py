@@ -1,26 +1,28 @@
-import pytest
-from datetime import datetime
-from pandas.tseries.offsets import BDay
-from src.api.main import YahooApi, FinanceApi
-from src.db import schemas
-from config import EXAMPLE_STOCKS
+from datetime import datetime, timezone
 
-last_bday = datetime.today() - BDay(1)
+import pytest
+from pandas.tseries.offsets import BDay
+
+from config import EXAMPLE_STOCKS
+from src.api.main import FinanceApi, YahooApi
+from src.db import schemas
+
+last_bday = datetime.now(tz=timezone.utc) - BDay(1)
 
 
 @pytest.fixture(scope="session")
 def yf_api():
-    yield FinanceApi()
+    return FinanceApi()
 
 
 @pytest.fixture(scope="session")
 def yahoo_api():
-    yield YahooApi()
+    return YahooApi()
 
 
 @pytest.fixture(scope="session")
 def yahoo_request():
-    yield {
+    return {
         "endpoint": "https://yfapi.net/v8/finance/spark",
         "params": {
             "symbols": ",".join(EXAMPLE_STOCKS),
@@ -32,7 +34,7 @@ def yahoo_request():
 
 @pytest.fixture(scope="session")
 def single_request():
-    yield schemas.RequestBase(stock="AAPL", period="1y")
+    return schemas.RequestBase(stock="AAPL", period="1y")
 
 
 @pytest.fixture(scope="session")

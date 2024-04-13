@@ -1,11 +1,13 @@
+from collections import abc
+from collections.abc import Iterable
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import wrapt
-from collections import abc
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
-def batch(size: int, retry_items: bool = True, concat_axis: Optional[int] = None):
+def batch(size: int, retry_items: bool = True, concat_axis: int | None = None):
     """
     A decorator to processes a large number of inputs through a function in batches of a set size.
 
@@ -39,10 +41,7 @@ def batch(size: int, retry_items: bool = True, concat_axis: Optional[int] = None
             else:
                 results.append(result)
 
-        if (
-            isinstance(results[0], (pd.Series, pd.DataFrame))
-            and concat_axis is not None
-        ):
+        if isinstance(results[0], pd.Series | pd.DataFrame) and concat_axis is not None:
             results = pd.concat(results, axis=concat_axis)
 
         elif isinstance(results[0], list):
@@ -57,9 +56,7 @@ def chunk(data: Iterable, size: int):
     return [data[i : i + size] for i in range(0, len(data), size)]
 
 
-def validate_strict_args(
-    inp: Any, options: Union[List, Tuple], name: str, optional: bool = False
-) -> None:
+def validate_strict_args(inp: Any, options: list | tuple, name: str, optional: bool = False) -> None:
     if not (inp in options or (optional and inp is None)):
         raise ValueError(f"Inputs {name}: {inp} must be one of: {options}")
 
@@ -79,14 +76,14 @@ def dataframe_from_dict(d: dict) -> pd.DataFrame:
     Wrapper for pd.DataFrame.from_dict for dictionaries with metadata, which will propagate singleton key value pairs
     across full dataframe. Uses dataframe attrs, which is for metadata, but still experimental"""
 
-    df = pd.DataFrame.from_dict(d)
+    frame = pd.DataFrame.from_dict(d)
 
     for key, value in d.items():
         if not isinstance(value, abc.Iterable) or isinstance(value, str):
-            df.drop(columns=key, inplace=True)
-            df.attrs[key] = value
+            frame = frame.drop(columns=key)
+            frame.attrs[key] = value
 
-    return df
+    return frame
 
 
 def multiindex_from_dict(d: dict) -> pd.MultiIndex:
@@ -100,7 +97,7 @@ def multiindex_from_dict(d: dict) -> pd.MultiIndex:
     return pd.DataFrame(reform)
 
 
-def get_key_from_value(d: Dict[str, Any], v: Any):
+def get_key_from_value(d: dict[str, Any], v: Any):
     return list(d.keys())[list(d.values()).index(v)]
 
 

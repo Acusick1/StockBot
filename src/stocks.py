@@ -1,7 +1,8 @@
 import json
 from datetime import datetime
-from pydantic import BaseModel, model_validator, field_validator
-from typing import Optional
+
+from pydantic import BaseModel, field_validator, model_validator
+
 from src.db.main import DatabaseApi
 from src.stoploss import stop_losses
 from utils.gen import pct_change
@@ -9,15 +10,16 @@ from utils.gen import pct_change
 
 class Trade(BaseModel):
     ticker: str
-    open_stamp: Optional[datetime]
-    close_stamp: Optional[datetime]
+    open_stamp: datetime | None
+    close_stamp: datetime | None
     open_price: float
-    close_price: Optional[float]
-    quantity: Optional[float]
-    value: Optional[float]
+    close_price: float | None
+    quantity: float | None
+    value: float | None
     type: str
 
     @model_validator()
+    @classmethod
     def class_validator(cls, values):
         if "value" in values:
             values["quantity"] = values["value"] / values["open_price"]
@@ -31,6 +33,7 @@ class Trade(BaseModel):
         return values
 
     @field_validator("type")
+    @classmethod
     def type_validator(cls, trade_type):
         trade_type = trade_type.lower()
 
@@ -54,8 +57,7 @@ def evaluate_trade(trade: Trade):
     change = pct_change([trade.open_price, latest_price])
 
     stops = {
-        key: loss.calculate(data, bought_on=trade.open_stamp).iloc[-1].round(3)
-        for key, loss in stop_losses.items()
+        key: loss.calculate(data, bought_on=trade.open_stamp).iloc[-1].round(3) for key, loss in stop_losses.items()
     }
 
     print(f"Bought: {trade.open_stamp.date()} | {trade.open_price}")
@@ -67,9 +69,7 @@ def evaluate_trade(trade: Trade):
 if __name__ == "__main__":
     from utils.market import get_market_tz
 
-    d = get_market_tz().localize(datetime(2023, 2, 6))
+    d = get_market_tz().localize(datetime(2023, 2, 6))  # noqa: DTZ001
 
-    trade = Trade(
-        ticker="AMZN", open_stamp=d, open_price=102.0, value=200.0, type="buy"
-    )
+    trade = Trade(ticker="AMZN", open_stamp=d, open_price=102.0, value=200.0, type="buy")
     evaluate_trade(trade)

@@ -1,12 +1,14 @@
+from functools import partial
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from backtesting import Backtest, Strategy
-from functools import partial
-from hyperopt import fmin, hp, space_eval, tpe, STATUS_OK
+from hyperopt import STATUS_OK, fmin, hp, space_eval, tpe
 from sklearn.model_selection import KFold
-from typing import Any, Optional
-from strategies import daily
+
 from src.db.main import DatabaseApi
+from strategies import daily
 from utils import gen
 from utils.tickers import get_snp500_tickers
 
@@ -14,18 +16,18 @@ from utils.tickers import get_snp500_tickers
 def run(
     data: pd.MultiIndex,
     strategy: Strategy,
-    params: Optional[dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
     **kwargs,
 ):
     if params is not None:
         _ = strategy._check_params(strategy, params)
 
     out, all_bt = {}, {}
-    for stock, df in data.groupby(level=0, axis=1):
-        df = df.droplevel(0, axis=1)
-        df["Close"] = df["Adj Close"]
-        df = df.dropna()
-        bt = Backtest(df, strategy, cash=1000, commission=0.002)
+    for stock, stock_df in data.groupby(level=0, axis=1):
+        stock_df = stock_df.droplevel(0, axis=1)
+        stock_df["Close"] = stock_df["Adj Close"]
+        stock_df = stock_df.dropna()
+        bt = Backtest(stock_df, strategy, cash=1000, commission=0.002)
 
         out[stock] = bt.run(**kwargs)
         all_bt[stock] = bt
@@ -103,9 +105,7 @@ if __name__ == "__main__":
         all_stats[f"run{i}"] = stats
 
         # Taking mean of numeric columns
-        reduced_stats[f"run{i}"] = df_stats.loc[
-            :, ~df_stats.columns.str.startswith("_")
-        ].mean(numeric_only=False)
+        reduced_stats[f"run{i}"] = df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean(numeric_only=False)
 
         i += 1
 

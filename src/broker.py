@@ -1,8 +1,8 @@
 import csv
 from abc import ABC, abstractmethod
-from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
 from src.db.main import DatabaseApi
 from src.stocks import Trade
 from utils.market import get_market_tz
@@ -15,7 +15,7 @@ class Broker(ABC):
         self.closed_positions: list[Trade] = []
         self.trades_csv_file = "trades.csv"
 
-    def buy(self, ticker: str, value: float, **kwargs) -> Optional[Trade]:
+    def buy(self, ticker: str, value: float, **kwargs) -> Trade | None:
         trade = self._buy(ticker, value, **kwargs)
 
         if trade is not None:
@@ -29,7 +29,7 @@ class Broker(ABC):
         if trade not in self.open_positions:
             raise ValueError("Trade not found in open positions")
 
-        elif trade.open_price is None:
+        elif trade.open_price is None:  # noqa: RET506
             raise ValueError("Trade is not open!")
 
         closed_trade = self._close(trade, **kwargs)
@@ -39,14 +39,14 @@ class Broker(ABC):
 
         return closed_trade
 
-    def sell(self, ticker: str, value: float, **kwargs) -> Optional[Trade]:
+    def sell(self, ticker: str, value: float, **kwargs) -> Trade | None:
         trade = self._sell(ticker, value, **kwargs)
         if trade is not None:
             for open_trade in self.open_positions:
                 # Selling first trade of given ticker
                 if open_trade.ticker == ticker:
                     open_trade.close_price = trade.price
-                    open_trade.close_stamp = get_market_tz().localize(datetime.now())
+                    open_trade.close_stamp = get_market_tz().localize(datetime.now(tz=timezone.utc))
                     self.closed_positions.append(open_trade)
                     self.open_positions.remove(open_trade)
                     self.cash_balance += value
@@ -64,32 +64,30 @@ class Broker(ABC):
         return self.cash_balance
 
     @abstractmethod
-    def _buy(self, ticker: str, value: float, **kwargs) -> Optional[Trade]:
+    def _buy(self, ticker: str, value: float, **kwargs) -> Trade | None:
         raise NotImplementedError()
 
     @abstractmethod
-    def _sell(self, ticker: str, value: float, **kwargs) -> Optional[Trade]:
+    def _sell(self, ticker: str, value: float, **kwargs) -> Trade | None:
         raise NotImplementedError()
 
     @abstractmethod
-    def _close(self, trade: Trade, **kwargs) -> Optional[Trade]:
+    def _close(self, trade: Trade, **kwargs) -> Trade | None:
         raise NotImplementedError()
 
     def _write_trade_to_csv(self, trade: Trade):
-        with open(self.trades_csv_file, mode="a") as trades_file:
+        with Path(self.trades_csv_file).open("a") as trades_file:
             writer = csv.writer(trades_file)
             if trades_file.tell() == 0:
-                writer.writerow(trade.dict().keys())
-            writer.writerow(trade.dict().values())
+                writer.writerow(trade.model_dump().keys())
+            writer.writerow(trade.model_dump().values())
 
     def _update_trade_in_csv(self, trade: Trade):
         temp_file = "temp.csv"
 
-        with open(self.trades_csv_file, mode="r") as trades_file, open(
-            temp_file, mode="w", newline=""
-        ) as f:
-            reader = csv.DictReader(trades_file)
-            writer = csv.DictWriter(f, fieldnames=reader.fieldnames)
+        with Path(self.trades_csv_file).open("r") as trades_file, Path(temp_file).open("w", newline="") as f:
+            reader = csv.model_dumpReader(trades_file)
+            writer = csv.model_dumpWriter(f, fieldnames=reader.fieldnames)
             writer.writeheader()
             for row in reader:
                 if (
@@ -113,12 +111,9 @@ class TestBroker(Broker):
     def _align_date(self, d: datetime):
         # TODO: Abstract
         d = get_market_tz().localize(d)
-        d = d.replace(hour=0, minute=0)
-        return d
+        return d.replace(hour=0, minute=0)
 
-    def _buy(
-        self, ticker: str, value: float, d: datetime, price: Optional[float] = None
-    ) -> Trade:
+    def _buy(self, ticker: str, value: float, d: datetime, price: float | None = None) -> Trade:
         d = self._align_date(d)
 
         data = self.db.request(stock=[ticker])
@@ -127,14 +122,13 @@ class TestBroker(Broker):
             price = data.loc[d, "Close"]
         elif not (data.loc[d, "Low"] <= price <= data.loc[d, "High"]):
             raise ValueError(
-                f"Input price: {price} is outside of bounds (Low: {data.loc[d, 'Low']} High: {data.loc[d, 'High']}) for date: {d.date().strftime('%Y-%m-%d')}"
+                f"Input price: {price} is outside of bounds (Low: {data.loc[d, 'Low']} High: {data.loc[d, 'High']})\
+                for date: {d.date().strftime('%Y-%m-%d')}"
             )
 
-        return Trade(
-            ticker=ticker, open_price=price, value=value, open_stamp=d, type="buy"
-        )
+        return Trade(ticker=ticker, open_price=price, value=value, open_stamp=d, type="buy")
 
-    def _close(self, trade: Trade, d: datetime, price: Optional[float] = None) -> Trade:
+    def _close(self, trade: Trade, d: datetime, price: float | None = None) -> Trade:
         d = self._align_date(d)
 
         data = self.db.request(stock=[trade.ticker])
@@ -143,7 +137,8 @@ class TestBroker(Broker):
             price = data.loc[d, "Close"]
         elif not (data.loc[d, "Low"] <= price <= data.loc[d, "High"]):
             raise ValueError(
-                f"Input price: {price} is outside of bounds (Low: {data.loc[d, 'Low']} High: {data.loc[d, 'High']}) for date: {d.date().strftime('%Y-%m-%d')}"
+                f"Input price: {price} is outside of bounds (Low: {data.loc[d, 'Low']} High: {data.loc[d, 'High']})\
+                for date: {d.date().strftime('%Y-%m-%d')}"
             )
 
         trade.close_price = price
@@ -157,8 +152,6 @@ class TestBroker(Broker):
 
 if __name__ == "__main__":
     broker = TestBroker(cash_balance=1000)
-    _ = broker.buy("AMZN", value=200.0, d=datetime(year=2023, month=2, day=6))
-    trade = broker.close(
-        broker.open_positions[0], d=datetime(year=2023, month=2, day=17)
-    )
+    _ = broker.buy("AMZN", value=200.0, d=datetime(year=2023, month=2, day=6, tzinfo=timezone.utc))
+    trade = broker.close(broker.open_positions[0], d=datetime(year=2023, month=2, day=17, tzinfo=timezone.utc))
     print(trade)

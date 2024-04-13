@@ -1,6 +1,7 @@
-import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+
 from utils.gen import pct_change
 
 matplotlib.use("TkAgg")
@@ -33,9 +34,7 @@ class LiveStrategy:
                 plt.plot(data["Adj Close"].iloc[i : i + 2], c=c)
 
                 if transaction[i] in ("buy", "sell"):
-                    plt.scatter(
-                        data.index[i], data["Adj Close"].iloc[i], c=c, marker="x"
-                    )
+                    plt.scatter(data.index[i], data["Adj Close"].iloc[i], c=c, marker="x")
 
                 plt.pause(0.1)
 
@@ -57,10 +56,7 @@ class LiveStrategy:
                 prices = np.array([self.opened_at, price_list[-1]])
                 change_since_buy = pct_change(prices)
 
-                if (
-                    change_since_buy[0] > self.profit_stop
-                    or change_since_buy[0] < self.loss_stop
-                ):
+                if change_since_buy[0] > self.profit_stop or change_since_buy[0] < self.loss_stop:
                     self.profit += change_since_buy * self.investment
                     self.opened_at = None
                     res = "sell"

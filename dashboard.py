@@ -1,14 +1,16 @@
+from datetime import datetime, timezone
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import streamlit as st
-import matplotlib.pyplot as plt
 import seaborn as sbn
-from datetime import datetime
-from src.api.main import FinanceApi
-from src.db.schemas import RequestBase, valid_intervals, valid_periods
-from src.db.main import DatabaseApi
-from utils.plotting import get_subplot_shape
+import streamlit as st
+
 from config import EXAMPLE_STOCKS
+from src.api.main import FinanceApi
+from src.db.main import DatabaseApi
+from src.db.schemas import RequestBase, valid_intervals, valid_periods
+from utils.plotting import get_subplot_shape
 
 api = FinanceApi()
 
@@ -16,7 +18,7 @@ api = FinanceApi()
 def plot_stock(data: pd.DataFrame):
     def format_date(x, pos=None):
         thisind = np.clip(int(x + 0.5), 0, nums - 1)
-        return df.index[thisind].strftime("%Y-%m-%d %H:%M")
+        return stock_df.index[thisind].strftime("%Y-%m-%d %H:%M")
 
     subplot_shape = get_subplot_shape(len(data.columns.unique(0)))
 
@@ -28,12 +30,12 @@ def plot_stock(data: pd.DataFrame):
         ax = [ax]
 
     i = 0
-    for stock, df in data.groupby(level=0, axis=1):
-        df = df.droplevel(0, axis=1)
-        nums = np.arange(df.shape[0])
+    for stock, stock_df in data.groupby(level=0, axis=1):
+        stock_df = stock_df.droplevel(0, axis=1)
+        nums = np.arange(stock_df.shape[0])
         plt.sca(ax[i])
         ax[i].set_title(stock)
-        sbn.lineplot(x=nums, y=df["Adj Close"])
+        sbn.lineplot(x=nums, y=stock_df["Adj Close"])
         # ax[i].xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
         i += 1
 
@@ -67,12 +69,12 @@ def main():
                 stock=tickers,
                 period=period,
                 interval=interval,
-                end_date=datetime.today(),
+                end_date=datetime.now(tz=timezone.utc),
             )
-            df = database.get_data(request)
+            ticker_df = database.get_data(request)
 
-            if df is not None:
-                plot_stock(df)
+            if ticker_df is not None:
+                plot_stock(ticker_df)
 
     else:
         st.write("Interval must be less than period")

@@ -74,9 +74,7 @@ class MacdDerivCross(TrailingStrategy):
 
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
-        self.macd_deriv, self.signal = self.I(
-            macd_deriv_signal, self.macd, name="MACD'"
-        )
+        self.macd_deriv, self.signal = self.I(macd_deriv_signal, self.macd, name="MACD'")
         self.set_trailing_sl(2)
 
     def next(self):
@@ -131,9 +129,7 @@ class MacdGradDerivCross(TrailingStrategy):
 
         # Precompute macd and signal
         self.macd = self.I(macd, self.data.Close, name="MACD")
-        self.macd_grad, self.macd_deriv = self.I(
-            macd_grad_deriv, self.macd, name="MACD'", smooth=self.smooth
-        )
+        self.macd_grad, self.macd_deriv = self.I(macd_grad_deriv, self.macd, name="MACD'", smooth=self.smooth)
         self.signal = np.zeros(self.macd.shape) + self.threshold
         self.set_trailing_sl(2)
 
@@ -244,9 +240,7 @@ def macd(values, n_fast: int = 12, n_slow: int = 26):
     """
     emaslow = pd.Series(values).ewm(span=n_slow, adjust=False).mean()
     emafast = pd.Series(values).ewm(span=n_fast, adjust=False).mean()
-    macd = emafast - emaslow
-
-    return macd
+    return emafast - emaslow
 
 
 def smoother(func, _smooth: int = 9, *args, **kwargs):

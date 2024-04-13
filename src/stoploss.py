@@ -1,9 +1,10 @@
+from datetime import datetime, timezone
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime
 from pandas.tseries.offsets import BDay
-from typing import Optional
+
 from src.db.main import DatabaseApi
 
 
@@ -21,16 +22,14 @@ class AtrStopLoss(StopLoss):
         self.multiplier = multiplier
         self.period = period
 
-    def calculate(self, df: pd.DataFrame, bought_on: Optional[datetime] = None):
+    def calculate(self, df: pd.DataFrame, bought_on: datetime | None = None):
         if bought_on is None:
             bought_on = df.index[0]
 
         data = get_atr(df.copy(), period=self.period)
         atr_close = data["Close"] - (self.multiplier * data["ATR"])
 
-        stop_loss = atr_close.loc[bought_on:].expanding(1).max()
-
-        return stop_loss
+        return atr_close.loc[bought_on:].expanding(1).max()
 
 
 class LowStopLoss(StopLoss):
@@ -38,7 +37,7 @@ class LowStopLoss(StopLoss):
         super().__init__()
         self.period = period
 
-    def calculate(self, df: pd.DataFrame, bought_on: Optional[datetime] = None):
+    def calculate(self, df: pd.DataFrame, bought_on: datetime | None = None):
         if bought_on is None:
             bought_on = df.index[0]
 
@@ -48,7 +47,7 @@ class LowStopLoss(StopLoss):
 
 def get_true_range(data: pd.DataFrame):
     # Calculate the true range
-    data = data.assign(
+    return data.assign(
         TR=np.abs(
             np.array(
                 [
@@ -60,14 +59,11 @@ def get_true_range(data: pd.DataFrame):
         ).max(axis=0)
     )
 
-    return data
-
 
 def get_atr(data: pd.DataFrame, period: int = 14):
     # Calculate the ATR (average true range)
     data = get_true_range(data)
-    data = data.assign(ATR=data["TR"].rolling(window=period).mean())
-    return data
+    return data.assign(ATR=data["TR"].rolling(window=period).mean())
 
 
 stop_losses = {
@@ -82,7 +78,7 @@ if __name__ == "__main__":
     data = db.request(stock=["AMZN"], flat=True)
 
     bought_at = None
-    bought_on = db.calendar.tz.localize(datetime(2022, 6, 6))
+    bought_on = db.calendar.tz.localize(datetime(2022, 6, 6, tzinfo=timezone.utc))
 
     if bought_at is None:
         bought_at = data.loc[bought_on, ["High", "Low"]].mean()
@@ -93,10 +89,7 @@ if __name__ == "__main__":
         raise ValueError("Not a valid buy price on given date")
 
     stops = pd.DataFrame(
-        {
-            key: loss.calculate(data, bought_on=bought_on)
-            for key, loss in stop_losses.items()
-        },
+        {key: loss.calculate(data, bought_on=bought_on) for key, loss in stop_losses.items()},
         index=data.index,
     )
 

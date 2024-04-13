@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
-from src.db.main import DatabaseApi
+
 from config import settings
+from src.db.main import DatabaseApi
 
 
 def add_analysis(data: pd.DataFrame):
@@ -50,7 +51,7 @@ def get_historical_features(data: pd.DataFrame):
     # market_variance = market_change.std() ** 2
     # beta = cov / market_variance
 
-    features = pd.DataFrame(
+    return pd.DataFrame(
         {
             "volatility": volatility,
             "avg_volume": mean_volume,
@@ -61,33 +62,34 @@ def get_historical_features(data: pd.DataFrame):
         }
     )
 
-    return features
-
 
 def get_market_history(ticker: str = "^GSPC", period="1y"):
     db = DatabaseApi()
-    market_history = db.request([ticker], period=period)
-    return market_history
+    return db.request([ticker], period=period)
 
 
 def get_stock_metadata(stocks: list[str]):
+    """
+    Returns:
+    features:
+    """
     metadata = pd.read_csv(settings.data_path / "stock_metadata.csv", index_col=0)
-    features = metadata.loc[metadata.index.intersection(stocks), :]
-
-    return features
+    return metadata.loc[metadata.index.intersection(stocks), :]
 
 
 def calculate_volatility(data: pd.Series):
     """
     Calculate volatility of input data
+
+    Returns:
+    volatility:
     """
 
     # Calculate the daily returns of the stock
     pct_change = data.pct_change()
 
     # Calculate the volatility (standard deviation) of the daily returns
-    volatility = np.sqrt(data.shape[0]) * pct_change.std()
-    return volatility
+    return np.sqrt(data.shape[0]) * pct_change.std()
 
 
 def calculate_weighted_volatility(data: pd.Series, window: int, lambda_: float = 0.95):
@@ -103,13 +105,15 @@ def calculate_weighted_volatility(data: pd.Series, window: int, lambda_: float =
     float: The EWMA volatility.
     """
     returns = data.pct_change().dropna()
-    volatility = returns.ewm(alpha=lambda_, min_periods=window).std()[-1]
-    return volatility
+    return returns.ewm(alpha=lambda_, min_periods=window).std()[-1]
 
 
 def calculate_beta(stock: str, period: str = "1y", comp_stock: str = "^GSPC"):
     """
     Calculate volatility of a stock compared to the market over a given period
+
+    Returns:
+    beta:
     """
     db = DatabaseApi()
 
@@ -118,8 +122,7 @@ def calculate_beta(stock: str, period: str = "1y", comp_stock: str = "^GSPC"):
 
     cov = stock_change.cov(market_change)
     market_variance = market_change.std() ** 2
-    beta = cov / market_variance
-    return beta
+    return cov / market_variance
 
 
 if __name__ == "__main__":
@@ -129,10 +132,8 @@ if __name__ == "__main__":
     ticker = "MSFT"
 
     db = DatabaseApi()
-    df = db.request(ticker).loc[:, ticker].copy()
-    df = dropna(df)
+    ticker_df = db.request(ticker).loc[:, ticker].copy()
+    ticker_df = dropna(ticker_df)
 
-    df = add_all_ta_features(
-        df, open="Open", high="High", low="Low", close="Close", volume="Volume"
-    )
-    print(df)
+    ticker_df = add_all_ta_features(ticker_df, open="Open", high="High", low="Low", close="Close", volume="Volume")
+    print(ticker_df)

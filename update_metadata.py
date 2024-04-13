@@ -1,10 +1,12 @@
-import pandas as pd
-from datetime import datetime
-from pandas_datareader import data
+from datetime import datetime, timezone
 from time import sleep
+
+import pandas as pd
+from pandas_datareader import data
+
+from config import settings, yahoo_api_settings
 from src.db.main import DatabaseApi
 from utils.gen import batch
-from config import settings, yahoo_api_settings
 
 
 @batch(size=yahoo_api_settings.max_stocks_per_request, concat_axis=0)
@@ -17,12 +19,12 @@ def get_stock_metadata(tickers: list[str]) -> pd.DataFrame:
 
     except KeyError as e:
         print(f"Failed: {repr(e)}")
-        return
+        return None
 
 
 if __name__ == "__main__":
     db = DatabaseApi()
-    print("Updating stock metadata:", datetime.now())
+    print("Updating stock metadata:", datetime.now(tz=timezone.utc))
     tickers = db.get_stored_tickers(group="daily")
 
     metadata = get_stock_metadata(tickers)

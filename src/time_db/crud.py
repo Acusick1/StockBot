@@ -1,23 +1,20 @@
-from typing import Type, Optional
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
-from src.time_db.database import engine
-from src.time_db.database import Base
+
+from src.time_db.database import Base, engine
 
 
-def get_record_by_filter(model: Type[Base], data: dict):  # type: ignore
+def get_record_by_filter(model: type[Base], data: dict):  # type: ignore
     with Session(engine) as session:
-        instance = session.query(model).filter_by(**data).first()
-        return instance
+        return session.query(model).filter_by(**data).first()
 
 
-def get_record_by_id(model: Type[Base], record_id: int) -> Optional[Type[Base]]:  # type: ignore
+def get_record_by_id(model: type[Base], record_id: int) -> type[Base] | None:  # type: ignore
     with Session(engine) as session:
-        result = session.query(model).get(record_id)
-        return result
+        return session.query(model).get(record_id)
 
 
-def create_record(model: Type[Base], data: dict) -> Type[Base]:  # type: ignore
+def create_record(model: type[Base], data: dict) -> type[Base]:  # type: ignore
     obj = model(**data)
 
     with Session(engine) as session:
@@ -28,7 +25,7 @@ def create_record(model: Type[Base], data: dict) -> Type[Base]:  # type: ignore
     return obj
 
 
-def create_records(model: Type[Base], data_list: list[dict]) -> list[Base]:  # type: ignore
+def create_records(model: type[Base], data_list: list[dict]) -> list[Base]:  # type: ignore
     with Session(engine) as session:
         table = model.__table__
 
@@ -40,9 +37,7 @@ def create_records(model: Type[Base], data_list: list[dict]) -> list[Base]:  # t
         session.commit()
 
 
-def update_record(
-    model: Type[Base], record_id: int, data: dict
-) -> Optional[Type[Base]]:  # type: ignore
+def update_record(model: type[Base], record_id: int, data: dict) -> type[Base] | None:  # type: ignore
     with Session(engine) as session:
         obj = session.query(model).get(record_id)
         if not obj:
@@ -54,7 +49,7 @@ def update_record(
         return obj
 
 
-def delete_record(model: Type[Base], record_id: int) -> None:  # type: ignore
+def delete_record(model: type[Base], record_id: int) -> None:  # type: ignore
     with Session(engine) as session:
         obj = session.query(model).get(record_id)
         session.delete(obj)

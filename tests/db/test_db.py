@@ -1,7 +1,9 @@
 from datetime import timedelta
+from unittest.mock import patch
+
 from pandas import DataFrame, testing
 from pandas.tseries.offsets import BDay
-from unittest.mock import patch
+
 from src.db.main import create_fake_data
 
 
@@ -42,18 +44,14 @@ def test_get_db_data(database_api, fake_year_request):
     pull_data = database_api.get_db_data(key, end_date=end_date_delta)
     assert pull_data.index[-1].date() == end_date_delta.date()
 
-    pull_data = database_api.get_db_data(
-        key, start_date=start_date_delta, end_date=end_date_delta
-    )
+    pull_data = database_api.get_db_data(key, start_date=start_date_delta, end_date=end_date_delta)
     assert pull_data.index[0].date() == start_date_delta.date()
     assert pull_data.index[-1].date() == end_date_delta.date()
 
 
 # TODO: Split into two tests
 @patch("yfinance.download")
-def test_similar_requests(
-    yfd, database_api, fake_year_request, fake_month_request, mocker
-):
+def test_similar_requests(yfd, database_api, fake_year_request, fake_month_request, mocker):
     h5_key = fake_year_request.get_h5_keys()[0]
     data = create_fake_data(request=fake_year_request)
     yfd.return_value = data
@@ -124,4 +122,4 @@ def test_nan_overwrite(yfd, database_api, fake_month_request):
     request_data = database_api.get_data(request=fake_month_request, request_nan=True)
 
     assert yfd.call_count == 2
-    assert ~request_data.isna().values.any()
+    assert ~request_data.isna().to_numpy().any()

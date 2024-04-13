@@ -1,8 +1,10 @@
-import pytest
-from src.db import schemas
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-today = datetime.today()
+import pytest
+
+from src.db import schemas
+
+today = datetime.now(tz=timezone.utc)
 delta = timedelta(days=30)
 
 stock_example = "EXPL"
@@ -11,7 +13,7 @@ period_example = "1d"
 
 
 @pytest.mark.parametrize(
-    "period, start_date, end_date",
+    ("period", "start_date", "end_date"),
     [(None, today - delta, today), (delta, today - delta, None), (delta, None, today)],
 )
 def test_request_date_args(period, start_date, end_date):
@@ -26,13 +28,11 @@ def test_request_date_args(period, start_date, end_date):
 
 @pytest.mark.parametrize("period", ["ytd"])
 def test_periods(period):
-    schemas.RequestBase(
-        stock=stock_example, interval=interval_example, period=period, end_date=today
-    )
+    schemas.RequestBase(stock=stock_example, interval=interval_example, period=period, end_date=today)
 
 
 @pytest.mark.parametrize(
-    "interval_string, total_seconds",
+    ("interval_string", "total_seconds"),
     [
         ("1m", 60),
         ("2m", 2 * 60),
@@ -54,7 +54,7 @@ def test_invalid_interval():
 
 
 def test_end_date_fail():
-    with pytest.raises(ValueError, match="Start date is greater than end date"):
+    with pytest.raises(ValueError, match="End date is"):
         schemas.RequestBase(
             stock=stock_example,
             interval=interval_example,
@@ -64,7 +64,7 @@ def test_end_date_fail():
 
 
 def test_too_large_interval():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="End date is"):
         schemas.RequestBase(
             stock=stock_example,
             interval="5d",

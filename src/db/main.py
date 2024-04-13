@@ -1,20 +1,21 @@
+from datetime import datetime, timedelta
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
-from pathlib import Path
-from typing import Optional
-from datetime import datetime, timedelta
+
+from config import settings
 from src.api.main import FinanceApi
 from src.db import schemas
-from utils.hdf5 import h5_key_elements
 from utils.gen import chunk
-from config import settings
+from utils.hdf5 import h5_key_elements
 
 
 class DatabaseApi:
     def __init__(
         self,
-        api: Optional[FinanceApi] = None,
+        api: FinanceApi | None = None,
         market: str = "NYSE",
         store_path: Path = settings.stock_history_file,
     ):
@@ -28,8 +29,8 @@ class DatabaseApi:
         stock: list[str],
         interval="1d",
         period="1y",
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
         flat: bool = False,
         *args,
         **kwargs,
@@ -90,14 +91,12 @@ class DatabaseApi:
             start_date = request.start_date - timedelta(days=1)
             end_date = request.end_date + timedelta(days=1)
 
-            for tick in request.stock:
-                key = request.get_h5_key(tick)
-                db_data = self.get_db_data(
-                    key, start_date=start_date, end_date=end_date
-                )
+            for ticker in request.stock:
+                key = request.get_h5_key(ticker)
+                db_data = self.get_db_data(key, start_date=start_date, end_date=end_date)
 
                 if db_data is None or not db_data.shape[0]:
-                    diff[tick] = base_indices
+                    diff[ticker] = base_indices
                     continue
 
                 # Drop NaNs before checking for differences
@@ -111,18 +110,16 @@ class DatabaseApi:
                 if diff_dates:
                     # Now take difference at lowest level (may still be dates only) to filter request data for
                     # database insertion
-                    diff[tick] = base_indices.difference(db_data.index)
+                    diff[ticker] = base_indices.difference(db_data.index)
                 else:
                     # All data present in database, no need to make request, can assign data directly
-                    data[tick] = db_data
+                    data[ticker] = db_data
 
         mi = pd.concat(data, axis=1) if data else None
         request.stock = list(set(request.stock) - set(data.keys()))
 
         if request.stock:
-            response = self.api.make_request(
-                request, interval_key=request.get_base_interval()
-            )
+            response = self.api.make_request(request, interval_key=request.get_base_interval())
 
             # Ensure all rows are present.
             # Data returned may not be complete, and we do not want to make repeated requests because data is missing.
@@ -133,24 +130,25 @@ class DatabaseApi:
                 if response.columns.nlevels == 1:
                     response = pd.concat({request.stock[0]: response}, axis=1)
 
-                for tick, df in response.T.groupby(level=0):
-                    tick = str(tick)
-                    df = df.droplevel(0, axis=0).T
+                for ticker, ticker_df in response.T.groupby(level=0):
+                    ticker = str(ticker)
+                    ticker_df = ticker_df.droplevel(0, axis=0).T
 
-                    if tick in diff:
-                        df = df.filter(items=diff[tick], axis=0)
+                    if ticker in diff:
+                        ticker_df = ticker_df.filter(items=diff[ticker], axis=0)
 
                     # Joining, keeping fresh data, and sorting
-                    # Reading, merging and overwriting stored data here may take a while, but appending can be error prone.
-                    #   At least this way the duplicates and sorting is done immediately.
-                    key = request.get_h5_key(tick)
+                    # Reading, merging and overwriting stored data here may take a while,
+                    #   but appending can be error prone. At least this way the duplicates
+                    #   and sorting is done immediately.
+                    key = request.get_h5_key(ticker)
                     if key in self.store.keys():
-                        df = pd.concat([self.store.get(key), df])
+                        ticker_df = pd.concat([self.store.get(key), ticker_df])
 
-                    df = df[~df.index.duplicated(keep="last")]
-                    df = df.sort_index()
+                    ticker_df = ticker_df[~ticker_df.index.duplicated(keep="last")]
+                    ticker_df = ticker_df.sort_index()
 
-                    self.store.put(key=key, value=df, format="table")
+                    self.store.put(key=key, value=ticker_df, format="table")
 
                 mi = pd.concat([mi, response], axis=1)
 
@@ -159,9 +157,7 @@ class DatabaseApi:
 
         return mi
 
-    def get_db_data(
-        self, key, start_date=None, end_date=None
-    ) -> Optional[pd.DataFrame]:
+    def get_db_data(self, key, start_date=None, end_date=None) -> pd.DataFrame | None:
         """
         Filter store data by key and optional start/end dates
         NOTE: Currently assumes full days only, inclusive of start/end dates
@@ -179,11 +175,9 @@ class DatabaseApi:
             end_date = end_date.replace(hour=0, minute=0)
             where.append("index<=end_date")
 
-        db_data = pd.DataFrame(self.store.select(key, where=where)).sort_index()
+        return pd.DataFrame(self.store.select(key, where=where)).sort_index()
 
-        return db_data
-
-    def update_daily(self, tickers: Optional[list[str]] = None, *args, **kwargs):
+    def update_daily(self, tickers: list[str] | None = None, *args, **kwargs):
         """
         Update database based on tickers currently in database (default) or input tickers
 
@@ -202,28 +196,21 @@ class DatabaseApi:
             _ = self.get_data(req, *args, **kwargs)
 
     def get_stored_tickers(self, group: str = "daily"):
-        tickers = [k.split("/")[-1] for k in self.store.keys() if group in k]
-        return tickers
+        return [k.split("/")[-1] for k in self.store.keys() if group in k]
 
     def __del__(self):
         self.store.close()
 
 
-def get_indices(
-    request: schemas.RequestBase, calendar, frequency: Optional[str] = None
-):
+def get_indices(request: schemas.RequestBase, calendar, frequency: str | None = None):
     if frequency is None:
         frequency = request.interval.key
 
     if frequency.endswith("m"):
-        schedule = calendar.schedule(
-            start_date=request.start_date, end_date=request.end_date, tz=calendar.tz
-        )
+        schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=calendar.tz)
         indices = mcal.date_range(schedule, frequency=frequency)
     else:
-        schedule = calendar.schedule(
-            start_date=request.start_date, end_date=request.end_date, tz=None
-        )
+        schedule = calendar.schedule(start_date=request.start_date, end_date=request.end_date, tz=None)
         indices = schedule.index.tz_localize(calendar.tz)
 
     return indices
@@ -235,21 +222,17 @@ def update_data_file(h5_file: pd.HDFStore, key: str, interval="1d"):
     """
     api = DatabaseApi()
 
-    df = pd.DataFrame(h5_file.select(key, start=-2))
-    start = df.index[-1] + timedelta(days=1)
+    data = pd.DataFrame(h5_file.select(key, start=-2))
+    start = data.index[-1] + timedelta(days=1)
     now = datetime.now(tz=start.tz)
 
-    data_interval = (df.index[-1] - df.index[-2]).total_seconds()
+    data_interval = (data.index[-1] - data.index[-2]).total_seconds()
 
     # Difference between today's date and first date to download must be greater than the interval of collected data,
     # and at least one day as API does not provide live data.
-    if (now - start).total_seconds() > max(
-        data_interval, timedelta(days=1).total_seconds()
-    ):
+    if (now - start).total_seconds() > max(data_interval, timedelta(days=1).total_seconds()):
         download_key = h5_key_elements(key, index=-1)
-        request = schemas.RequestBase(
-            stock=download_key, start_date=start, end_date=now, interval=interval
-        )
+        request = schemas.RequestBase(stock=download_key, start_date=start, end_date=now, interval=interval)
         api.get_data(request=request)
 
 
@@ -259,10 +242,10 @@ def clean_data():
     """
     with pd.HDFStore(settings.stock_history_file) as h5:
         for key in h5.keys():
-            df = pd.DataFrame(h5.get(key))
-            df = df.drop_duplicates().sort_index()
+            stock_df = pd.DataFrame(h5.get(key))
+            stock_df = stock_df.drop_duplicates().sort_index()
 
-            h5.put(key=key, value=df, format="table")
+            h5.put(key=key, value=stock_df, format="table")
 
 
 def create_fake_data(request: schemas.RequestBase, market: str = "NYSE"):
@@ -271,5 +254,5 @@ def create_fake_data(request: schemas.RequestBase, market: str = "NYSE"):
 
     columns = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
-    data = np.random.rand(index.shape[0], len(columns))
+    data = np.random.rand(index.shape[0], len(columns))  # noqa: NPY002
     return pd.DataFrame(data, columns=columns, index=index)
