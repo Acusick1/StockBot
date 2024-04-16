@@ -5,20 +5,21 @@ from pydantic import BaseModel, field_validator, model_validator
 
 from src.db.main import DatabaseApi
 from src.stoploss import stop_losses
+from src.time_db.schemas import Daily
 from utils.gen import pct_change
 
 
 class Trade(BaseModel):
     ticker: str
     open_stamp: datetime | None
-    close_stamp: datetime | None
     open_price: float
-    close_price: float | None
+    close_stamp: datetime | None = None
+    close_price: float | None = None
     quantity: float | None
     value: float | None
     type: str
 
-    @model_validator()
+    @model_validator(mode="before")
     @classmethod
     def class_validator(cls, values):
         if "value" in values:
@@ -49,7 +50,7 @@ def evaluate_trade(trade: Trade):
     # TODO: Better way of defining how much to look back
     if trade.open_stamp is not None:
         data = db.request([trade.ticker], period="1y")
-        latest_price = data["Close"].iloc[-1]
+        latest_price = data[Daily.adj_close].iloc[-1]
         latest_date = data.index[-1]
     else:
         raise NotImplementedError()
@@ -67,9 +68,9 @@ def evaluate_trade(trade: Trade):
 
 
 if __name__ == "__main__":
-    from utils.market import get_market_tz
+    from src.time_db.schemas import nytz
 
-    d = get_market_tz().localize(datetime(2023, 2, 6))  # noqa: DTZ001
+    d = datetime(2023, 2, 6, tzinfo=nytz.tz)
 
     trade = Trade(ticker="AMZN", open_stamp=d, open_price=102.0, value=200.0, type="buy")
     evaluate_trade(trade)

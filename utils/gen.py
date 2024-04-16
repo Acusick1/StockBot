@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import wrapt
+from pandera import DataFrameModel
 
 
 def batch(size: int, retry_items: bool = True, concat_axis: int | None = None):
@@ -124,3 +125,10 @@ def unflatten_dict(flattened_dict, sep="__"):
             subdict = subdict[k]
         subdict[keys[-1]] = value
     return nested_dict
+
+
+def get_empty_pandera_df(model: DataFrameModel) -> pd.DataFrame:
+    schema = model.to_schema()
+    column_names = list(schema.columns.keys())
+    data_types = {column_name: column_type.dtype.type.name for column_name, column_type in schema.columns.items()}
+    return pd.DataFrame(columns=column_names).astype(data_types)

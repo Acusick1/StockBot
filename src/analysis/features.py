@@ -31,7 +31,8 @@ def add_analysis(data: pd.DataFrame):
     return data
 
 
-def get_historical_features(data: pd.DataFrame):
+# TODO: This needs to be updated (if we want to use it), with new pandera based schema
+def get_historical_features(data: pd.MultiIndex):
     # market = get_market_history()
     # market = market.dropna()
     data = data.dropna()

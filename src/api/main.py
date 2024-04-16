@@ -5,9 +5,12 @@ from time import sleep
 import pandas as pd
 import requests
 import yfinance as yf
+from pandera import check_output
+from pandera.typing import DataFrame
 
 from config import yahoo_api_settings
 from src.db import schemas
+from src.time_db.schemas import Daily, nytz
 from utils.gen import batch
 
 
@@ -50,7 +53,10 @@ class FinanceApi:
         req = schemas.RequestBase(stock=stock, **kwargs)
         return self.make_request(req)
 
-    def make_request(self, request: schemas.RequestBase, interval_key: str | None = None, **kwargs) -> pd.DataFrame:
+    @check_output(schema=Daily.to_schema())
+    def make_request(
+        self, request: schemas.RequestBase, interval_key: str | None = None, market: str = "NYSE", **kwargs
+    ) -> DataFrame[Daily]:
         """Make request to API for input stocks, using default parameters set during initialisation, and merge with
         existing database data.
         :param request: request schema with all information needed to make an API request
@@ -67,17 +73,27 @@ class FinanceApi:
 
         output = self._download(tickers=tickers, period=period, interval=interval_key, **kwargs)
 
-        if output is not None:
-            if "m" in interval_key and output.shape[0] > 2:
-                # Ensure data is consistent. Downloading date range data will automatically append most recent days
-                # closing data (looks to be a bug in yfinance)
-                # TODO: Just compare tail delta to mapped interval value here
-                head_delta = int((output.index[1] - output.index[0]).total_seconds())
-                tail_delta = int((output.index[-1] - output.index[-2]).total_seconds())
-                if tail_delta != head_delta:
-                    output = output.drop(output.index[-1])
+        if output is None:
+            return None
 
-        return output
+        # Making a multi-index for consistent response
+        if len(tickers) == 1:
+            output = pd.concat({tickers[0]: output}, axis=1)
+
+        if "m" in interval_key and output.shape[0] > 2:
+            # Ensure data is consistent. Downloading date range data will automatically append most recent days
+            # closing data (looks to be a bug in yfinance)
+            # TODO: Just compare tail delta to mapped interval value here
+            head_delta = int((output.index[1] - output.index[0]).total_seconds())
+            tail_delta = int((output.index[-1] - output.index[-2]).total_seconds())
+            if tail_delta != head_delta:
+                output = output.drop(output.index[-1])
+
+        # Converting multiindex to dataframe by stacking stock name index to column
+        output.index = output.index.tz_localize(nytz.tz)
+        output = output.stack(level=0, future_stack=True).reset_index()  # noqa: PD013
+        output.columns = [x.lower().replace(" ", "_") for x in output.columns]
+        return output.rename(columns={"date": Daily.timestamp, "level_0": Daily.timestamp, "level_1": Daily.stock_id})
 
     @batch(size=yahoo_api_settings.max_stocks_per_request, concat_axis=1)
     def _download(self, tickers, **kwargs):

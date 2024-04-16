@@ -9,7 +9,6 @@ from src.api.gen import (
     get_period_from_delta,
     split_period,
 )
-from utils.hdf5 import get_h5_key
 
 # All options
 # valid_intervals = ("1m", "2m", "5m", "15m", "30m", "1h", "1d", "5d", "1mo", "3mo")
@@ -128,20 +127,10 @@ class RequestBase(BaseModel):
                     f"{self.end_date} < {self.start_date} + {self.interval.delta}"
                 )
 
-    def get_h5_keys(self):
-        """Get key format used in h5 files: base interval (minute, daily) with stock subgroup"""
-        # TODO: Match base interval to yahoo format? (minute > 1m, daily > 1d)
-        base_period = get_base_period(self.interval.key)
-        return [get_h5_key(base_period, stock) for stock in self.stock]
-
     def get_base_interval(self):
         """Get yahoo API interval format from base interval (1m or 1d)"""
         base_period = get_base_period(self.interval.key)
         return "1" + base_period[0]
-
-    def get_h5_key(self, stock: str):
-        base_period = get_base_period(self.interval.key)
-        return get_h5_key(base_period, stock)
 
 
 if __name__ == "__main__":

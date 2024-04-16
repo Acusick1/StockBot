@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from src.time_db.database import Base, engine
 
 
-def get_record_by_filter(model: type[Base], data: dict):  # type: ignore
+def get_record_by_filter(model: type[Base], data: dict) -> type[Base]:  # type: ignore
     with Session(engine) as session:
         return session.query(model).filter_by(**data).first()
 

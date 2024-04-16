@@ -6,6 +6,7 @@ import pandas as pd
 from pandas.tseries.offsets import BDay
 
 from src.db.main import DatabaseApi
+from src.time_db.schemas import Daily
 
 
 class StopLoss:
@@ -24,12 +25,12 @@ class AtrStopLoss(StopLoss):
 
     def calculate(self, df: pd.DataFrame, bought_on: datetime | None = None):
         if bought_on is None:
-            bought_on = df.index[0]
+            bought_on = df[Daily.timestamp][0]
 
         data = get_atr(df.copy(), period=self.period)
-        atr_close = data["Close"] - (self.multiplier * data["ATR"])
+        atr_close = data[Daily.adj_close] - (self.multiplier * data["ATR"])
 
-        return atr_close.loc[bought_on:].expanding(1).max()
+        return atr_close.loc[df[Daily.timestamp] >= bought_on].expanding(1).max()
 
 
 class LowStopLoss(StopLoss):
@@ -41,8 +42,8 @@ class LowStopLoss(StopLoss):
         if bought_on is None:
             bought_on = df.index[0]
 
-        stop_loss = df["Low"].rolling(window=self.period).min()
-        return stop_loss.loc[bought_on:].expanding(1).max()
+        stop_loss = df[Daily.low].rolling(window=self.period).min()
+        return stop_loss.loc[df[Daily.timestamp] >= bought_on].expanding(1).max()
 
 
 def get_true_range(data: pd.DataFrame):
@@ -51,9 +52,9 @@ def get_true_range(data: pd.DataFrame):
         TR=np.abs(
             np.array(
                 [
-                    data["High"] - data["Low"],
-                    data["High"] - data["Close"],
-                    data["Close"] - data["Low"],
+                    data[Daily.high] - data[Daily.low],
+                    data[Daily.high] - data[Daily.adj_close],
+                    data[Daily.adj_close] - data[Daily.low],
                 ]
             )
         ).max(axis=0)
@@ -67,7 +68,7 @@ def get_atr(data: pd.DataFrame, period: int = 14):
 
 
 stop_losses = {
-    "low": LowStopLoss(),
+    Daily.low: LowStopLoss(),
     "atr conservative": AtrStopLoss(multiplier=1),
     "atr normal": AtrStopLoss(multiplier=2),
 }
@@ -81,9 +82,9 @@ if __name__ == "__main__":
     bought_on = db.calendar.tz.localize(datetime(2022, 6, 6, tzinfo=timezone.utc))
 
     if bought_at is None:
-        bought_at = data.loc[bought_on, ["High", "Low"]].mean()
+        bought_at = data.loc[bought_on, [Daily.high, Daily.low]].mean()
 
-    is_valid = data.loc[bought_on, "Low"] <= bought_at <= data.loc[bought_on, "High"]
+    is_valid = data.loc[bought_on, Daily.low] <= bought_at <= data.loc[bought_on, Daily.high]
 
     if not is_valid:
         raise ValueError("Not a valid buy price on given date")
@@ -94,10 +95,10 @@ if __name__ == "__main__":
     )
 
     ax = stops.plot(y=stops.columns, use_index=True)
-    ax.plot(data["Close"], label="Close")
+    ax.plot(data[Daily.adj_close], label=Daily.adj_close)
     ax.plot(bought_on, bought_at, "go")
 
-    reached = stops.ge(data[["Close"]].values).expanding(1).max().sum(axis=1)
+    reached = stops.ge(data[[Daily.adj_close]].values).expanding(1).max().sum(axis=1)
 
     reached_threshold = 2
     if reached.max() >= reached_threshold:

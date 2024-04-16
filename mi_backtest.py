@@ -6,6 +6,7 @@ from backtesting import Backtest
 from hyperopt import STATUS_OK, fmin, hp, space_eval, tpe
 
 from src.db.main import DatabaseApi
+from src.time_db.schemas import Daily, daily_to_backtest
 from strategies.multi_indicator import (
     MacdDeriv,
     MultiIndicatorStrategy,
@@ -27,11 +28,10 @@ def run(
         msi.set_params(**params)
 
     out, all_bt = {}, {}
-    for stock, stock_df in data.groupby(level=0, axis=1):
-        stock_df = stock_df.droplevel(0, axis=1)
-        stock_df["Close"] = stock_df["Adj Close"]
-        stock_df = stock_df.dropna()
-        bt = Backtest(stock_df, MultiIndicatorStrategy, cash=1000, commission=0.002)
+    for stock, stock_df in data.groupby(Daily.stock_id):
+        backtest_df = daily_to_backtest(stock_df)
+        backtest_df = backtest_df.dropna()
+        bt = Backtest(backtest_df, MultiIndicatorStrategy, cash=1000, commission=0.002)
 
         out[stock] = bt.run(msi=msi, **kwargs)
         all_bt[stock] = bt
@@ -91,7 +91,8 @@ if __name__ == "__main__":
 
     all_stats = pd.DataFrame(stats).transpose()
 
-    print(all_stats.loc[:, ~all_stats.columns.str.startswith("_")].mean(numeric_only=False))
+    # TODO: Working reduction method needed
+    # print(all_stats.loc[:, ~all_stats.columns.str.startswith("_")].mean(numeric_only=False))
 
     for bt in all_bt.values():
         bt.plot()

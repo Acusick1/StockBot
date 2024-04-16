@@ -8,13 +8,14 @@ from hyperopt import STATUS_OK, fmin, hp, space_eval, tpe
 from sklearn.model_selection import KFold
 
 from src.db.main import DatabaseApi
+from src.time_db.schemas import Daily, daily_to_backtest
 from strategies import daily
 from utils import gen
 from utils.tickers import get_snp500_tickers
 
 
 def run(
-    data: pd.MultiIndex,
+    data: Daily,
     strategy: Strategy,
     params: dict[str, Any] | None = None,
     **kwargs,
@@ -23,11 +24,10 @@ def run(
         _ = strategy._check_params(strategy, params)
 
     out, all_bt = {}, {}
-    for stock, stock_df in data.groupby(level=0, axis=1):
-        stock_df = stock_df.droplevel(0, axis=1)
-        stock_df["Close"] = stock_df["Adj Close"]
-        stock_df = stock_df.dropna()
-        bt = Backtest(stock_df, strategy, cash=1000, commission=0.002)
+    for stock, stock_df in data.groupby(Daily.stock_id):
+        backtest_df = daily_to_backtest(stock_df)
+        backtest_df = backtest_df.dropna()
+        bt = Backtest(backtest_df, strategy, cash=1000, commission=0.002)
 
         out[stock] = bt.run(**kwargs)
         all_bt[stock] = bt
@@ -92,25 +92,27 @@ if __name__ == "__main__":
         train_stocks = np.array(stocks)[train_id]
         test_stocks = np.array(stocks)[test_id]
 
-        obj_func = partial(objective, strategy=strategy, data=data[train_stocks])
+        obj_func = partial(objective, strategy=strategy, data=data[data[Daily.stock_id].isin(train_stocks)])
 
         best = opt(obj_func, param_space=param_space, max_evals=10)
 
         best_params = space_eval(param_space, best)
         print(best_params)
 
-        stats, all_bt = run(data[test_stocks], strategy=strategy, params=best_params)
-        df_stats = pd.DataFrame(stats).transpose()
+        stats, all_bt = run(data[data[Daily.stock_id].isin(test_stocks)], strategy=strategy, params=best_params)
 
         all_stats[f"run{i}"] = stats
 
+        # TODO: Working reduction method needed
         # Taking mean of numeric columns
-        reduced_stats[f"run{i}"] = df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean(numeric_only=False)
+        # df_stats = pd.DataFrame(stats).transpose()
+        # df_stats = df_stats.apply(lambda x: pd.to_numeric(x, errors='ignore'))
+        # reduced_stats[f"run{i}"] = df_stats.loc[:, ~df_stats.columns.str.startswith("_")].mean()
 
         i += 1
 
-    reduced_stats = pd.concat(reduced_stats, axis=1)
-    print(reduced_stats)
+    # reduced_stats = pd.concat(reduced_stats, axis=1)
+    # print(reduced_stats)
 
     all_stats = gen.multiindex_from_dict(all_stats)
     print(all_stats)

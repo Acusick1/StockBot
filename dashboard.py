@@ -30,8 +30,8 @@ def plot_stock(data: pd.DataFrame):
         ax = [ax]
 
     i = 0
-    for stock, stock_df in data.groupby(level=0, axis=1):
-        stock_df = stock_df.droplevel(0, axis=1)
+    for stock, stock_df in data.T.groupby(level=0):
+        stock_df = stock_df.droplevel(0).T
         nums = np.arange(stock_df.shape[0])
         plt.sca(ax[i])
         ax[i].set_title(stock)

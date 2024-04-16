@@ -5,7 +5,7 @@ from pathlib import Path
 
 from src.db.main import DatabaseApi
 from src.stocks import Trade
-from utils.market import get_market_tz
+from src.time_db.schemas import Daily, nytz
 
 
 class Broker(ABC):
@@ -46,7 +46,7 @@ class Broker(ABC):
                 # Selling first trade of given ticker
                 if open_trade.ticker == ticker:
                     open_trade.close_price = trade.price
-                    open_trade.close_stamp = get_market_tz().localize(datetime.now(tz=timezone.utc))
+                    open_trade.close_stamp = datetime.now(tz=nytz.tz)
                     self.closed_positions.append(open_trade)
                     self.open_positions.remove(open_trade)
                     self.cash_balance += value
@@ -109,8 +109,8 @@ class TestBroker(Broker):
         super().__init__(cash_balance)
 
     def _align_date(self, d: datetime):
-        # TODO: Abstract
-        d = get_market_tz().localize(d)
+        # TODO: Abstract, also nytz.localize is not tested
+        d = nytz.localize(d)
         return d.replace(hour=0, minute=0)
 
     def _buy(self, ticker: str, value: float, d: datetime, price: float | None = None) -> Trade:
@@ -119,8 +119,8 @@ class TestBroker(Broker):
         data = self.db.request(stock=[ticker])
 
         if price is None:
-            price = data.loc[d, "Close"]
-        elif not (data.loc[d, "Low"] <= price <= data.loc[d, "High"]):
+            price = data.loc[d, Daily.adj_close]
+        elif not (data.loc[d, Daily.low] <= price <= data.loc[d, Daily.high]):
             raise ValueError(
                 f"Input price: {price} is outside of bounds (Low: {data.loc[d, 'Low']} High: {data.loc[d, 'High']})\
                 for date: {d.date().strftime('%Y-%m-%d')}"
@@ -134,8 +134,8 @@ class TestBroker(Broker):
         data = self.db.request(stock=[trade.ticker])
 
         if price is None:
-            price = data.loc[d, "Close"]
-        elif not (data.loc[d, "Low"] <= price <= data.loc[d, "High"]):
+            price = data.loc[d, Daily.adj_close]
+        elif not (data.loc[d, Daily.low] <= price <= data.loc[d, Daily.high]):
             raise ValueError(
                 f"Input price: {price} is outside of bounds (Low: {data.loc[d, 'Low']} High: {data.loc[d, 'High']})\
                 for date: {d.date().strftime('%Y-%m-%d')}"
