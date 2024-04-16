@@ -4,12 +4,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
+from pandera import check_output
+from pandera.typing import DataFrame
 
 from config import settings
 from src.api.main import FinanceApi
 from src.db import schemas
-from utils.gen import chunk
-from utils.hdf5 import h5_key_elements
+from src.time_db.database import engine
+from src.time_db.schemas import Daily, nytz
+from src.time_db.update import insert_ohlc_data
+from utils.gen import chunk, get_empty_pandera_df
 
 
 class DatabaseApi:
@@ -56,6 +60,7 @@ class DatabaseApi:
 
         return data
 
+    @check_output(Daily.to_schema())
     def get_data(
         self,
         request: schemas.RequestBase,
@@ -81,81 +86,54 @@ class DatabaseApi:
             request=request,
             calendar=self.calendar,
             frequency=request.get_base_interval(),
-        )
+        ).astype(nytz)
 
-        data = {}
-        diff = {}
+        db_data = None
 
         if not force:
-            # Search slightly outwith bounds to ensure time is not excluding results
-            start_date = request.start_date - timedelta(days=1)
-            end_date = request.end_date + timedelta(days=1)
+            tickers_string = ", ".join(f"'{ticker}'" for ticker in request.stock)
+            # Assuming all requests have been converted to start date, end date format
+            if request.start_date:
+                query = f"""
+                    SELECT *
+                    FROM daily
+                    WHERE timestamp BETWEEN '{request.start_date.date()}' AND '{request.end_date.date()}'
+                    AND stock_id IN ({tickers_string})
+                    ORDER BY timestamp;
+                """  # noqa: S608
+            else:
+                query = f"""
+                    SELECT *
+                    FROM daily
+                    AND stock_id IN ({tickers_string})
+                    ORDER BY timestamp;
+                """  # noqa: S608
 
-            for ticker in request.stock:
-                key = request.get_h5_key(ticker)
-                db_data = self.get_db_data(key, start_date=start_date, end_date=end_date)
+            # TODO: Move to own validated function
+            db_data = pd.read_sql(query, engine)
+            db_data[Daily.timestamp] = db_data[Daily.timestamp].astype(nytz)
 
-                if db_data is None or not db_data.shape[0]:
-                    diff[ticker] = base_indices
-                    continue
-
-                # Drop NaNs before checking for differences
-                if request_nan:
-                    db_data = db_data.dropna()
-
-                # Lots of missing ticks in minute based raw data, so cannot directly compare indices, have to
-                # compare dates instead
-                diff_dates = set(base_indices.date) - set(db_data.index.date)
-
-                if diff_dates:
-                    # Now take difference at lowest level (may still be dates only) to filter request data for
-                    # database insertion
-                    diff[ticker] = base_indices.difference(db_data.index)
-                else:
-                    # All data present in database, no need to make request, can assign data directly
-                    data[ticker] = db_data
-
-        mi = pd.concat(data, axis=1) if data else None
-        request.stock = list(set(request.stock) - set(data.keys()))
+        request.stock = list(set(request.stock) - set(db_data[Daily.stock_id].unique()))
 
         if request.stock:
             response = self.api.make_request(request, interval_key=request.get_base_interval())
 
             # Ensure all rows are present.
             # Data returned may not be complete, and we do not want to make repeated requests because data is missing.
-            response = response.reindex(base_indices)
+            # TODO: This can be done cleaner, look up multiple operations on a dataframe
+            response = (
+                response.set_index(Daily.timestamp)
+                .reindex(base_indices)
+                .reset_index()
+                .rename(columns={"index": Daily.timestamp})
+            )
 
-            if response.shape[0]:
-                # Make multi-index
-                if response.columns.nlevels == 1:
-                    response = pd.concat({request.stock[0]: response}, axis=1)
+            if response is not None and response.shape[0]:
+                self.put_data(response)
 
-                for ticker, ticker_df in response.T.groupby(level=0):
-                    ticker = str(ticker)
-                    ticker_df = ticker_df.droplevel(0, axis=0).T
+            db_data = pd.concat([db_data, response]).reset_index(drop=True)
 
-                    if ticker in diff:
-                        ticker_df = ticker_df.filter(items=diff[ticker], axis=0)
-
-                    # Joining, keeping fresh data, and sorting
-                    # Reading, merging and overwriting stored data here may take a while,
-                    #   but appending can be error prone. At least this way the duplicates
-                    #   and sorting is done immediately.
-                    key = request.get_h5_key(ticker)
-                    if key in self.store.keys():
-                        ticker_df = pd.concat([self.store.get(key), ticker_df])
-
-                    ticker_df = ticker_df[~ticker_df.index.duplicated(keep="last")]
-                    ticker_df = ticker_df.sort_index()
-
-                    self.store.put(key=key, value=ticker_df, format="table")
-
-                mi = pd.concat([mi, response], axis=1)
-
-        if mi is not None:
-            mi = mi.filter(items=base_indices, axis=0)
-
-        return mi
+        return db_data
 
     def get_db_data(self, key, start_date=None, end_date=None) -> pd.DataFrame | None:
         """
@@ -176,6 +154,16 @@ class DatabaseApi:
             where.append("index<=end_date")
 
         return pd.DataFrame(self.store.select(key, where=where)).sort_index()
+
+    def put_data(self, data: DataFrame[Daily]):
+        """
+        Insert data to database
+        """
+        for stock, stock_df in data.groupby(Daily.stock_id):
+            stock_df = stock_df.dropna()
+
+            if not stock_df.empty:
+                insert_ohlc_data(ticker=stock, data=stock_df)
 
     def update_daily(self, tickers: list[str] | None = None, *args, **kwargs):
         """
@@ -216,43 +204,23 @@ def get_indices(request: schemas.RequestBase, calendar, frequency: str | None = 
     return indices
 
 
-def update_data_file(h5_file: pd.HDFStore, key: str, interval="1d"):
-    """
-    Update data file with data up to current day
-    """
-    api = DatabaseApi()
-
-    data = pd.DataFrame(h5_file.select(key, start=-2))
-    start = data.index[-1] + timedelta(days=1)
-    now = datetime.now(tz=start.tz)
-
-    data_interval = (data.index[-1] - data.index[-2]).total_seconds()
-
-    # Difference between today's date and first date to download must be greater than the interval of collected data,
-    # and at least one day as API does not provide live data.
-    if (now - start).total_seconds() > max(data_interval, timedelta(days=1).total_seconds()):
-        download_key = h5_key_elements(key, index=-1)
-        request = schemas.RequestBase(stock=download_key, start_date=start, end_date=now, interval=interval)
-        api.get_data(request=request)
-
-
-def clean_data():
-    """
-    Cleaning every dataset by sorting indices and dropping duplicates
-    """
-    with pd.HDFStore(settings.stock_history_file) as h5:
-        for key in h5.keys():
-            stock_df = pd.DataFrame(h5.get(key))
-            stock_df = stock_df.drop_duplicates().sort_index()
-
-            h5.put(key=key, value=stock_df, format="table")
-
-
-def create_fake_data(request: schemas.RequestBase, market: str = "NYSE"):
+# TODO: Solution to market tz and custom nytz (needed for pandera)
+@check_output(Daily.to_schema())
+def create_fake_data(request: schemas.RequestBase, market: str = "NYSE") -> DataFrame[Daily]:
     calendar = mcal.get_calendar(market)
-    index = get_indices(request=request, calendar=calendar)
+    timestamps = get_indices(request=request, calendar=calendar).astype(nytz)
 
-    columns = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
+    daily_df = get_empty_pandera_df(Daily)
 
-    data = np.random.rand(index.shape[0], len(columns))  # noqa: NPY002
-    return pd.DataFrame(data, columns=columns, index=index)
+    # Select columns before doing anything, somehow int columns can change to float even when working on a different
+    # column
+    int_cols = daily_df.select_dtypes(int).columns
+    float_cols = daily_df.select_dtypes(float).columns
+
+    daily_df[Daily.timestamp] = timestamps
+    daily_df[Daily.stock_id] = "A"
+
+    daily_df[int_cols] = np.random.randint(0, 100, size=daily_df[int_cols].shape)  # noqa: NPY002
+    daily_df[float_cols] = np.random.rand(*daily_df[float_cols].shape)  # noqa: NPY002
+
+    return daily_df
