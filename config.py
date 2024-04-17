@@ -8,8 +8,6 @@ class Settings(BaseSettings):
 
     base_path: Path = Path(__file__).parent.resolve()
     data_path: Path = base_path / "data"
-    stock_history_file: Path = data_path / "stock_history.h5"
-    stock_metadata_file: Path = data_path / "stock_metadata.csv"
     date_fmt: str = "%Y-%m-%d"
     debug: bool = False
     db_username: str

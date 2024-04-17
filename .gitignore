@@ -7,8 +7,6 @@ __pycache__
 /workspace.xml
 .env
 *.csv
-*.h5
-*.hdf5
 *.html
 *.log
 *wip.py

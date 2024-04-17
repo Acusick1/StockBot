@@ -53,7 +53,7 @@ def split_period(period: str):
 
 
 def get_base_period(period: str):
-    # TODO: This needs to be married with the h5 file format somewhere, currently hard-coding keys
+    # TODO: Hard-coding keys, need to define in settings or schema
 
     """
     Get base period that ticker data is provided (minute or daily)

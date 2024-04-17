@@ -4,7 +4,7 @@ from time import sleep
 import pandas as pd
 from pandas_datareader import data
 
-from config import settings, yahoo_api_settings
+from config import yahoo_api_settings
 from src.db.main import DatabaseApi
 from utils.gen import batch
 
@@ -25,7 +25,6 @@ def get_stock_metadata(tickers: list[str]) -> pd.DataFrame:
 if __name__ == "__main__":
     db = DatabaseApi()
     print("Updating stock metadata:", datetime.now(tz=timezone.utc))
-    tickers = db.get_stored_tickers(group="daily")
 
-    metadata = get_stock_metadata(tickers)
-    metadata.to_csv(settings.stock_metadata_file)
+    # TODO: This has to update to stocks table
+    # metadata = get_stock_metadata(tickers)

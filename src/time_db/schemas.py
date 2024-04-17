@@ -14,7 +14,7 @@ class StockBase(BaseModel):
 
 class Daily(pa.DataFrameModel):
     stock_id: Series[str]
-    timestamp: Series[nytz]  # type: ignore
+    timestamp: Series[pd.DatetimeTZDtype] = pa.Field(dtype_kwargs={"tz": ZoneInfo("America/New_York")}, coerce=True)
     open: Series[float]
     high: Series[float]
     low: Series[float]

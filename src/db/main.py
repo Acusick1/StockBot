@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -7,13 +6,12 @@ import pandas_market_calendars as mcal
 from pandera import check_output
 from pandera.typing import DataFrame
 
-from config import settings
 from src.api.main import FinanceApi
 from src.db import schemas
 from src.time_db.database import engine
 from src.time_db.schemas import Daily, nytz
 from src.time_db.update import insert_ohlc_data
-from utils.gen import chunk, get_empty_pandera_df
+from utils.gen import get_empty_pandera_df
 
 
 class DatabaseApi:
@@ -21,12 +19,10 @@ class DatabaseApi:
         self,
         api: FinanceApi | None = None,
         market: str = "NYSE",
-        store_path: Path = settings.stock_history_file,
     ):
         self.api = api if api else FinanceApi()
         self.market = market
         self.calendar = mcal.get_calendar(market)
-        self.store = pd.HDFStore(str(store_path))
 
     def request(
         self,
@@ -53,12 +49,7 @@ class DatabaseApi:
             start_date=start_date,
             end_date=end_date,
         )
-        data = self.get_data(req, *args, **kwargs)
-
-        if len(stock) == 1 and flat:
-            data = data.droplevel(0, axis=1)
-
-        return data
+        return self.get_data(req, *args, **kwargs)
 
     @check_output(Daily.to_schema())
     def get_data(
@@ -91,27 +82,7 @@ class DatabaseApi:
         db_data = None
 
         if not force:
-            tickers_string = ", ".join(f"'{ticker}'" for ticker in request.stock)
-            # Assuming all requests have been converted to start date, end date format
-            if request.start_date:
-                query = f"""
-                    SELECT *
-                    FROM daily
-                    WHERE timestamp BETWEEN '{request.start_date.date()}' AND '{request.end_date.date()}'
-                    AND stock_id IN ({tickers_string})
-                    ORDER BY timestamp;
-                """  # noqa: S608
-            else:
-                query = f"""
-                    SELECT *
-                    FROM daily
-                    AND stock_id IN ({tickers_string})
-                    ORDER BY timestamp;
-                """  # noqa: S608
-
-            # TODO: Move to own validated function
-            db_data = pd.read_sql(query, engine)
-            db_data[Daily.timestamp] = db_data[Daily.timestamp].astype(nytz)
+            db_data = self.get_db_data(request)
 
         request.stock = list(set(request.stock) - set(db_data[Daily.stock_id].unique()))
 
@@ -120,7 +91,6 @@ class DatabaseApi:
 
             # Ensure all rows are present.
             # Data returned may not be complete, and we do not want to make repeated requests because data is missing.
-            # TODO: This can be done cleaner, look up multiple operations on a dataframe
             response = (
                 response.set_index(Daily.timestamp)
                 .reindex(base_indices)
@@ -135,25 +105,32 @@ class DatabaseApi:
 
         return db_data
 
-    def get_db_data(self, key, start_date=None, end_date=None) -> pd.DataFrame | None:
+    @check_output(Daily.to_schema())
+    def get_db_data(self, request: schemas.RequestBase) -> pd.DataFrame | None:
         """
         Filter store data by key and optional start/end dates
         NOTE: Currently assumes full days only, inclusive of start/end dates
         """
 
-        if key not in self.store.keys():
-            return None
+        tickers_string = ", ".join(f"'{ticker}'" for ticker in request.stock)
+        # Assuming all requests have been converted to start date, end date format
+        if request.start_date:
+            query = f"""
+                SELECT *
+                FROM daily
+                WHERE timestamp BETWEEN '{request.start_date.date()}' AND '{request.end_date.date()}'
+                AND stock_id IN ({tickers_string})
+                ORDER BY timestamp;
+            """  # noqa: S608
+        else:
+            query = f"""
+                SELECT *
+                FROM daily
+                AND stock_id IN ({tickers_string})
+                ORDER BY timestamp;
+            """  # noqa: S608
 
-        where = []
-        if start_date:
-            where.append("index>=start_date")
-        if end_date:
-            # Make datetime midnight (i.e. 00:00 on following day)
-            end_date += timedelta(1)
-            end_date = end_date.replace(hour=0, minute=0)
-            where.append("index<=end_date")
-
-        return pd.DataFrame(self.store.select(key, where=where)).sort_index()
+        return pd.read_sql(query, engine)
 
     def put_data(self, data: DataFrame[Daily]):
         """
@@ -164,30 +141,6 @@ class DatabaseApi:
 
             if not stock_df.empty:
                 insert_ohlc_data(ticker=stock, data=stock_df)
-
-    def update_daily(self, tickers: list[str] | None = None, *args, **kwargs):
-        """
-        Update database based on tickers currently in database (default) or input tickers
-
-        Parameters
-        ----------
-        tickers: Stock tickers to update/add to database (optional: default is to update existing)
-        kw/args: Additional parameters to get_data method
-        """
-
-        if tickers is None:
-            tickers = self.get_stored_tickers(group="daily")
-
-        chunked_tickers = chunk(tickers, size=self.api.max_stocks_per_request)
-        for group in chunked_tickers:
-            req = schemas.RequestBase(stock=group)
-            _ = self.get_data(req, *args, **kwargs)
-
-    def get_stored_tickers(self, group: str = "daily"):
-        return [k.split("/")[-1] for k in self.store.keys() if group in k]
-
-    def __del__(self):
-        self.store.close()
 
 
 def get_indices(request: schemas.RequestBase, calendar, frequency: str | None = None):
@@ -208,7 +161,7 @@ def get_indices(request: schemas.RequestBase, calendar, frequency: str | None = 
 @check_output(Daily.to_schema())
 def create_fake_data(request: schemas.RequestBase, market: str = "NYSE") -> DataFrame[Daily]:
     calendar = mcal.get_calendar(market)
-    timestamps = get_indices(request=request, calendar=calendar).astype(nytz)
+    timestamps = get_indices(request=request, calendar=calendar)
 
     daily_df = get_empty_pandera_df(Daily)
 

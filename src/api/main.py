@@ -10,7 +10,7 @@ from pandera.typing import DataFrame
 
 from config import yahoo_api_settings
 from src.db import schemas
-from src.time_db.schemas import Daily, nytz
+from src.time_db.schemas import Daily
 from utils.gen import batch
 
 
@@ -54,9 +54,7 @@ class FinanceApi:
         return self.make_request(req)
 
     @check_output(schema=Daily.to_schema())
-    def make_request(
-        self, request: schemas.RequestBase, interval_key: str | None = None, market: str = "NYSE", **kwargs
-    ) -> DataFrame[Daily]:
+    def make_request(self, request: schemas.RequestBase, interval_key: str | None = None, **kwargs) -> DataFrame[Daily]:
         """Make request to API for input stocks, using default parameters set during initialisation, and merge with
         existing database data.
         :param request: request schema with all information needed to make an API request
@@ -90,7 +88,7 @@ class FinanceApi:
                 output = output.drop(output.index[-1])
 
         # Converting multiindex to dataframe by stacking stock name index to column
-        output.index = output.index.tz_localize(nytz.tz)
+        # output.index = output.index.tz_localize(nytz.tz)
         output = output.stack(level=0, future_stack=True).reset_index()  # noqa: PD013
         output.columns = [x.lower().replace(" ", "_") for x in output.columns]
         return output.rename(columns={"date": Daily.timestamp, "level_0": Daily.timestamp, "level_1": Daily.stock_id})
